@@ -1,9 +1,9 @@
-import { Button } from "@nextui-org/react";
+import { Button } from "@heroui/react";
 
 export default function Home() {
   return (
     <div>
-      <Button>Click me</Button>
+      <Button color="primary">Button</Button>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import "@/styles/globals.css";
-import { NextUIProvider } from '@nextui-org/react';
+import { HeroUIProvider } from "@heroui/react";
 
 function App({ Component, pageProps }) {
   return (
-    <NextUIProvider>
+    <HeroUIProvider>
       <Component {...pageProps} />
-    </NextUIProvider>
+    </HeroUIProvider>
   );
 }
 
