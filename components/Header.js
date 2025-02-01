@@ -1,4 +1,3 @@
-'use client'
 import { useState, useEffect } from 'react';
 import { useWeb3Modal, useWeb3ModalAccount, useWeb3ModalProvider } from '@web3modal/ethers/react'
 import { formatEther } from 'ethers';
