@@ -59,13 +59,12 @@ function Chat() {
             // Create task on blockchain
             const provider = new BrowserProvider(walletProvider);
             const signer = await provider.getSigner();
-            const { hash, task, taskIndex } = await contractService.createTask(input, signer);
+            const { hash, task, taskIndex } = await contractService.createTask(input);
 
             // Update messages with user input and transaction hash
             setMessages(prev => [...prev, {
                 role: 'user',
-                content: `${input}\n\nTransaction submitted! Hash: ${hash}`,
-                isHash: true
+                content: `${input}\n\nTransaction submitted! Hash: ${hash}`
             }]);
 
             // Get AI response
@@ -75,15 +74,13 @@ function Chat() {
             const responseHash = await contractService.respondToTask(
                 task,
                 taskIndex,
-                aiResponse,
-                signer
+                aiResponse
             );
 
             // Update messages with AI response and its transaction hash
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: `${aiResponse}\n\nTransaction submitted! Hash: ${responseHash}`,
-                isHash: true
+                content: `${aiResponse}\n\nTransaction submitted! Hash: ${responseHash}`
             }]);
 
         } catch (error) {
@@ -110,13 +107,13 @@ function Chat() {
                             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
                             <div 
-                                className={`max-w-[80%] p-3 rounded-lg ${
+                                className={`max-w-[80%] p-3 rounded-lg whitespace-pre-wrap ${
                                     message.role === 'user' 
                                         ? 'bg-blue-500 text-white'
                                         : message.role === 'system'
                                         ? 'bg-gray-500 text-white'
                                         : 'bg-gray-200 dark:bg-gray-700 dark:text-white'
-                                } ${message.isHash ? 'font-mono text-sm' : ''}`}
+                                }`}
                             >
                                 {message.content}
                             </div>
