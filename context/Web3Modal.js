@@ -5,21 +5,21 @@ import { createWeb3Modal, defaultConfig } from '@web3modal/ethers/react'
 // 1. Get projectId from https://cloud.walletconnect.com
 const projectId = 'YOUR_PROJECT_ID'
 
-// 2. Set chains - Using Sepolia Testnet
-const sepolia = {
-  chainId: 11155111,
-  name: 'Sepolia',
+// 2. Set chains - Using Holesky Testnet
+const holesky = {
+  chainId: 17000,
+  name: 'Holesky',
   currency: 'ETH',
-  explorerUrl: 'https://sepolia.etherscan.io',
-  rpcUrl: 'https://rpc.sepolia.org'
+  explorerUrl: 'https://holesky.etherscan.io',
+  rpcUrl: 'https://ethereum-holesky.publicnode.com'
 }
 
 // 3. Create a metadata object
 const metadata = {
-  name: 'My Website',
-  description: 'My Website description',
-  url: 'https://mywebsite.com', // origin must match your domain & subdomain
-  icons: ['https://avatars.mywebsite.com/']
+  name: 'AI AVS',
+  description: 'AI AVS Web3 Application',
+  url: 'http://localhost:3000',
+  icons: ['https://avatars.githubusercontent.com/u/37784886']
 }
 
 // 4. Create Ethers config
@@ -28,19 +28,21 @@ const ethersConfig = defaultConfig({
   metadata,
 
   /*Optional*/
-  enableEIP6963: true, // true by default
-  enableInjected: true, // true by default
-  enableCoinbase: true, // true by default
-  rpcUrl: 'https://rpc.sepolia.org', // Sepolia RPC URL
-  defaultChainId: 11155111 // Sepolia Chain ID
+  enableEIP6963: true,
+  enableInjected: true,
+  enableCoinbase: false, // Disable other wallets
+  enableWalletConnect: false, // Disable WalletConnect
+  rpcUrl: 'https://ethereum-holesky.publicnode.com',
+  defaultChainId: 17000
 })
 
 // 5. Create a Web3Modal instance
 createWeb3Modal({
   ethersConfig,
-  chains: [sepolia],
+  chains: [holesky],
   projectId,
-  enableAnalytics: true // Optional - defaults to your Cloud configuration
+  defaultChain: holesky,
+  enableAnalytics: true
 })
 
 function Web3ModalProvider({ children }) {

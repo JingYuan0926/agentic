@@ -1,10 +1,46 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
+import { useWeb3ModalProvider, useWeb3ModalAccount } from '@web3modal/ethers/react';
+import ContractService from '../services/contractService';
+import { BrowserProvider } from 'ethers';
 
 function Chat() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef(null);
+    const { walletProvider } = useWeb3ModalProvider();
+    const { address, isConnected } = useWeb3ModalAccount();
+    const [contractService, setContractService] = useState(null);
+
+    useEffect(() => {
+        if (walletProvider) {
+            const service = new ContractService(walletProvider);
+            setContractService(service);
+
+            // Listen for new tasks and responses
+            const unsubscribeTask = service.listenToNewTasks((taskIndex, task) => {
+                console.log('New task created:', taskIndex, task);
+            });
+
+            const unsubscribeResponse = service.listenToResponses((taskIndex, response) => {
+                setMessages(prev => {
+                    // Find the loading message and replace it
+                    const newMessages = prev.filter(msg => !msg.isLoading);
+                    return [...newMessages, {
+                        role: 'assistant',
+                        content: response,
+                        taskIndex
+                    }];
+                });
+            });
+
+            return () => {
+                unsubscribeTask();
+                unsubscribeResponse();
+            };
+        }
+    }, [walletProvider]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -14,25 +50,53 @@ function Chat() {
         scrollToBottom();
     }, [messages]);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim()) return;
+        if (!input.trim() || !isConnected || !contractService) return;
 
-        // Add user message
-        setMessages(prev => [...prev, {
-            role: 'user',
-            content: input
-        }]);
+        setIsLoading(true);
+        try {
+            // Create task on blockchain
+            const provider = new BrowserProvider(walletProvider);
+            const signer = await provider.getSigner();
+            const { hash, task, taskIndex } = await contractService.createTask(input, signer);
 
-        // Simulate AI response (replace with actual AI integration)
-        setTimeout(() => {
+            // Update messages with user input and transaction hash
+            setMessages(prev => [...prev, {
+                role: 'user',
+                content: `${input}\n\nTransaction submitted! Hash: ${hash}`,
+                isHash: true
+            }]);
+
+            // Get AI response
+            const aiResponse = await contractService.getAIResponse(input);
+            
+            // Submit AI response to blockchain
+            const responseHash = await contractService.respondToTask(
+                task,
+                taskIndex,
+                aiResponse,
+                signer
+            );
+
+            // Update messages with AI response and its transaction hash
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: 'This is a simulated AI response. Replace with actual AI integration.'
+                content: `${aiResponse}\n\nTransaction submitted! Hash: ${responseHash}`,
+                isHash: true
             }]);
-        }, 1000);
 
-        setInput('');
+        } catch (error) {
+            console.error('Error:', error);
+            setMessages(prev => [...prev, {
+                role: 'system',
+                content: `Error: ${error.message}`,
+                isError: true
+            }]);
+        } finally {
+            setInput('');
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -48,9 +112,11 @@ function Chat() {
                             <div 
                                 className={`max-w-[80%] p-3 rounded-lg ${
                                     message.role === 'user' 
-                                        ? 'bg-blue-500 text-white' 
+                                        ? 'bg-blue-500 text-white'
+                                        : message.role === 'system'
+                                        ? 'bg-gray-500 text-white'
                                         : 'bg-gray-200 dark:bg-gray-700 dark:text-white'
-                                }`}
+                                } ${message.isHash ? 'font-mono text-sm' : ''}`}
                             >
                                 {message.content}
                             </div>
@@ -66,14 +132,16 @@ function Chat() {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Type your message..."
-                            className="flex-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder={isConnected ? "Type your message..." : "Please connect wallet first"}
+                            disabled={!isConnected || isLoading}
+                            className="flex-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         />
                         <button
                             type="submit"
-                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            disabled={!isConnected || isLoading}
+                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         >
-                            Send
+                            {isLoading ? 'Sending...' : 'Send'}
                         </button>
                     </form>
                 </div>
