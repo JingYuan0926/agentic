@@ -1,11 +1,11 @@
 import "@/styles/globals.css";
-import { HeroUIProvider } from "@heroui/react";
+import Web3ModalProvider from "../context/Web3Modal";
 
 function App({ Component, pageProps }) {
   return (
-    <HeroUIProvider>
+    <Web3ModalProvider>
       <Component {...pageProps} />
-    </HeroUIProvider>
+    </Web3ModalProvider>
   );
 }
 
