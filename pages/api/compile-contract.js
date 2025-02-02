@@ -16,6 +16,11 @@ export default function handler(req, res) {
                 }
             },
             settings: {
+                optimizer: {
+                    enabled: false,
+                    runs: 200
+                },
+                evmVersion: "shanghai",
                 outputSelection: {
                     '*': {
                         '*': ['*']
@@ -29,7 +34,9 @@ export default function handler(req, res) {
 
         res.status(200).json({
             abi: contract.abi,
-            bytecode: contract.evm.bytecode.object
+            bytecode: contract.evm.bytecode.object,
+            sourceCode,
+            contractName: 'ExclusiveFund'
         });
     } catch (error) {
         console.error('Compilation error:', error);
