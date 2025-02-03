@@ -8,11 +8,11 @@ if (!process.env.OPERATOR_PRIVATE_KEY) {
 
 const abi = [
   'function respondToTask((string contents, uint32 taskCreatedBlock) task, uint32 referenceTaskIndex, string response, bytes memory signature) external',
-  'event NewTaskCreated(uint32 indexed taskIndex, (string contents, uint32 taskCreatedBlock) task)'
+  'event NewTaskCreated(uint32 indexed taskIndex, (string contents, uint32 taskCreatedBlock) task)',
+  'function operatorRegistered(address) external view returns (bool)'
 ];
 
 async function createSignature(wallet, response, contents) {
-  // Match the contract's signature creation
   const messageHash = ethers.solidityPackedKeccak256(
     ['string', 'string'],
     [response, contents]
@@ -25,14 +25,27 @@ async function main() {
   const contractAddress = '0xDe1e04366D466bd9605447c9536fc0c907DCfB55';
   
   // Use WebSocket provider for reliable event listening
-  const provider = new ethers.WebSocketProvider('wss://ethereum-holesky.publicnode.com');
-  const wallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY, provider);
-  const contract = new ethers.Contract(contractAddress, abi, wallet);
+  const wsProvider = new ethers.WebSocketProvider('wss://ethereum-holesky.publicnode.com');
+  const operatorWallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY, wsProvider);
+  const contract = new ethers.Contract(contractAddress, abi, operatorWallet);
 
   console.log('🚀 Starting operator service...');
-  console.log('Waiting for tasks to analyze with DeepSeek LLM...');
+  console.log('Operator address:', operatorWallet.address);
 
-  // First test LLM connection
+  // First verify operator is registered
+  try {
+    const isRegistered = await contract.operatorRegistered(operatorWallet.address);
+    if (!isRegistered) {
+      console.error('❌ Operator is not registered!');
+      process.exit(1);
+    }
+    console.log('✅ Operator is registered');
+  } catch (error) {
+    console.error('❌ Failed to check operator status:', error);
+    process.exit(1);
+  }
+
+  // Test LLM connection
   try {
     console.log('Testing LLM connection...');
     const testResponse = await ollama.chat({
@@ -49,10 +62,12 @@ async function main() {
   contract.on('NewTaskCreated', async (taskIndex, task) => {
     console.log('\n📥 New task received:', {
       index: taskIndex,
-      text: task.contents
+      text: task.contents,
+      blockNumber: task.taskCreatedBlock
     });
 
     try {
+      // Get AI response
       console.log('🤖 Asking DeepSeek to analyze:', task.contents);
       const response = await ollama.chat({
         model: 'deepseek-r1:1.5b',
@@ -62,32 +77,49 @@ async function main() {
       const finalResponse = response.message.content.split('</think>')[1]?.trim() || response.message.content;
       console.log('✨ DeepSeek response:', finalResponse);
       
+      // Create signature and submit response
       console.log('📤 Submitting response to blockchain...');
-      const signature = await createSignature(wallet, finalResponse, task.contents);
+      const signature = await createSignature(operatorWallet, finalResponse, task.contents);
 
-      // Create task struct exactly as contract expects
       const taskStruct = {
         contents: task.contents,
-        taskCreatedBlock: task.taskCreatedBlock
+        taskCreatedBlock: Number(task.taskCreatedBlock)
       };
 
-      console.log('Sending task:', {
+      console.log('Sending response with params:', {
         task: taskStruct,
         taskIndex: Number(taskIndex),
         response: finalResponse,
         signature
       });
 
-      const tx = await contract.respondToTask(
-        taskStruct,
-        taskIndex,
-        finalResponse,
-        signature
-      );
+      // Submit with retry logic
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          const tx = await contract.respondToTask(
+            taskStruct,
+            taskIndex,
+            finalResponse,
+            signature,
+            {
+              gasLimit: 500000
+            }
+          );
 
-      console.log('⏳ Waiting for confirmation...');
-      const receipt = await tx.wait();
-      console.log('✅ Response submitted! Transaction:', tx.hash);
+          console.log('⏳ Waiting for confirmation...');
+          const receipt = await tx.wait();
+          console.log('✅ Response submitted! Transaction:', tx.hash);
+          break;
+        } catch (error) {
+          retries--;
+          if (retries === 0) {
+            throw error;
+          }
+          console.log(`Retrying... ${retries} attempts left`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
     } catch (error) {
       console.error('❌ Error processing task:', error);
       console.error('Error details:', error.error || error);
@@ -97,7 +129,7 @@ async function main() {
   // Handle graceful shutdown
   process.on('SIGINT', () => {
     console.log('Stopping task watcher...');
-    provider.destroy();
+    wsProvider.destroy();
     process.exit();
   });
 
