@@ -1,15 +1,5 @@
 import { ethers } from 'ethers';
-
-const CONTRACT_ADDRESS = '0xDe1e04366D466bd9605447c9536fc0c907DCfB55';
-const HOLESKY_RPC = 'https://ethereum-holesky.publicnode.com';
-
-const ABI = [
-    'function createNewTask(string memory contents) external returns ((string contents, uint32 taskCreatedBlock))',
-    'function respondToTask((string contents, uint32 taskCreatedBlock) task, uint32 referenceTaskIndex, string response, bytes memory signature) external',
-    'event NewTaskCreated(uint32 indexed taskIndex, (string contents, uint32 taskCreatedBlock) task)',
-    'event TaskResponseReceived(uint32 indexed taskIndex, string response)',
-    'function operatorRegistered(address) external view returns (bool)'
-];
+import { AVS_CONTRACT_ADDRESS, HOLESKY_RPC, AVS_ABI } from '../utils/contexts';
 
 class ContractService {
     constructor() {
@@ -18,7 +8,7 @@ class ContractService {
         }
         // Initialize with MetaMask provider for user transactions
         this.provider = new ethers.BrowserProvider(window.ethereum);
-        this.contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, this.provider);
+        this.contract = new ethers.Contract(AVS_CONTRACT_ADDRESS, AVS_ABI, this.provider);
     }
 
     async verifyOperator() {

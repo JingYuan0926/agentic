@@ -1,11 +1,5 @@
 import { ethers } from 'ethers';
-
-const CONTRACT_ADDRESS = '0xDe1e04366D466bd9605447c9536fc0c907DCfB55';
-const HOLESKY_RPC = 'https://ethereum-holesky.publicnode.com';
-
-const ABI = [
-    'function respondToTask((string contents, uint32 taskCreatedBlock) task, uint32 referenceTaskIndex, string response, bytes memory signature) external'
-];
+import { AVS_CONTRACT_ADDRESS, HOLESKY_RPC, AVS_ABI } from '../../utils/contexts';
 
 async function createSignature(wallet, response, contents) {
     const messageHash = ethers.solidityPackedKeccak256(
@@ -28,7 +22,7 @@ export default async function handler(req, res) {
         // Initialize operator wallet
         const provider = new ethers.JsonRpcProvider(HOLESKY_RPC);
         const operatorWallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY, provider);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, operatorWallet);
+        const contract = new ethers.Contract(AVS_CONTRACT_ADDRESS, AVS_ABI, operatorWallet);
 
         // Create signature
         const signature = await createSignature(operatorWallet, response, task.contents);
