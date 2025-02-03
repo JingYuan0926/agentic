@@ -12,25 +12,46 @@ const ABI = [
 
 class ContractService {
     constructor() {
-        if (!window.ethereum) {
-            throw new Error('MetaMask not found! Please install MetaMask.');
+        if (typeof window !== 'undefined') {
+            // Specifically check for MetaMask
+            if (!window.ethereum?.isMetaMask) {
+                throw new Error('MetaMask not found! Please install MetaMask.');
+            }
+            
+            // Get all Ethereum providers
+            const providers = window.ethereum.providers || [window.ethereum];
+            
+            // Find MetaMask provider
+            const metaMaskProvider = providers.find(p => p.isMetaMask);
+            
+            if (!metaMaskProvider) {
+                throw new Error('MetaMask provider not found!');
+            }
+
+            // Initialize with MetaMask provider specifically
+            this.provider = new ethers.BrowserProvider(metaMaskProvider);
+            this.contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, this.provider);
         }
-        // Initialize with MetaMask provider
-        this.provider = new ethers.BrowserProvider(window.ethereum);
-        this.contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, this.provider);
     }
 
     async ensureHoleskyNetwork() {
         try {
-            // Request network switch to Holesky
-            await window.ethereum.request({
+            // Get MetaMask provider
+            const providers = window.ethereum.providers || [window.ethereum];
+            const metaMaskProvider = providers.find(p => p.isMetaMask);
+            
+            // Request network switch to Holesky using MetaMask
+            await metaMaskProvider.request({
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: '0x4268' }], // 17000 in hex
             });
         } catch (switchError) {
             // If Holesky network is not added, add it
             if (switchError.code === 4902) {
-                await window.ethereum.request({
+                const providers = window.ethereum.providers || [window.ethereum];
+                const metaMaskProvider = providers.find(p => p.isMetaMask);
+                
+                await metaMaskProvider.request({
                     method: 'wallet_addEthereumChain',
                     params: [{
                         chainId: '0x4268',
