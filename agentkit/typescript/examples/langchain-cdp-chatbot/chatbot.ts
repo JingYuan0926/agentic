@@ -54,38 +54,24 @@ function validateEnvironment(): void {
 // Add this right after imports and before any other code
 validateEnvironment();
 
-// Configure a file to persist the agent's CDP MPC Wallet Data
-const WALLET_DATA_FILE = "wallet_data.txt";
-
 /**
  * Initialize the agent with CDP Agentkit
  *
+ * @param walletData - The wallet data received from the frontend
  * @returns Agent executor and config
  */
-async function initializeAgent() {
+async function initializeAgent(walletData: string) {
   try {
     // Initialize LLM
     const llm = new ChatOpenAI({
       model: "gpt-4o-mini",
     });
 
-    let walletDataStr: string | null = null;
-
-    // Read existing wallet data if available
-    if (fs.existsSync(WALLET_DATA_FILE)) {
-      try {
-        walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
-      } catch (error) {
-        console.error("Error reading wallet data:", error);
-        // Continue without wallet data
-      }
-    }
-
-    // Configure CDP Wallet Provider
+    // Use the wallet data directly in the configuration
     const config = {
+      cdpWalletData: walletData,
       apiKeyName: process.env.CDP_API_KEY_NAME,
       apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      cdpWalletData: walletDataStr || undefined,
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
 
@@ -133,10 +119,6 @@ async function initializeAgent() {
         restating your tools' descriptions unless it is explicitly requested.
         `,
     });
-
-    // Save wallet data
-    const exportedWallet = await walletProvider.exportWallet();
-    fs.writeFileSync(WALLET_DATA_FILE, JSON.stringify(exportedWallet));
 
     return { agent, config: agentConfig };
   } catch (error) {
@@ -272,7 +254,7 @@ async function chooseMode(): Promise<"chat" | "auto"> {
  */
 async function main() {
   try {
-    const { agent, config } = await initializeAgent();
+    const { agent, config } = await initializeAgent("");
     const mode = await chooseMode();
 
     if (mode === "chat") {
