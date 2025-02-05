@@ -90,6 +90,10 @@ export default function Chatbot() {
           <div className="logo">
             <span>Hello AI</span>
           </div>
+          <button className="connect-wallet-btn">
+            <span className="wallet-icon">💳</span>
+            <span>Connect Wallet</span>
+          </button>
           <div className="profile-icon">
             {/* Add profile icon here */}
           </div>
