@@ -45,12 +45,18 @@ export default function Chatbot() {
     setShowResponse(true);
   };
 
-  const handleSubmit = async () => {
-    if (!message.trim()) return;
+  const handlePromptClick = async (promptText) => {
+    setMessage(promptText);
+    await handleSubmit(promptText); // Pass the prompt text directly
+  };
+
+  const handleSubmit = async (customMessage = null) => {
+    const messageToSend = customMessage || message;
+    if (!messageToSend.trim()) return;
     
     setIsLoading(true);
     setIsResponding(true);
-    setMessages(prev => [...prev, { text: message, type: 'user' }]);
+    setMessages(prev => [...prev, { text: messageToSend, type: 'user' }]);
     
     try {
       const res = await fetch('/api/gpt4o', {
@@ -58,36 +64,46 @@ export default function Chatbot() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message: messageToSend }),
       });
       
       const data = await res.json();
       await updateStatus();
       
-      // Make sure the response is properly formatted
       setResponses(prev => [...prev, { 
         response: data.response,
         timestamp: new Date().toISOString()
       }]);
       
-      console.log('Response data:', data);
-      console.log('Current responses:', responses);
-      console.log('Show response:', showResponse);
-      
     } catch (error) {
       console.error('Error:', error);
-      // Add error handling UI here
     } finally {
       setIsLoading(false);
       setMessage('');
     }
   };
 
+  const handleLogoClick = () => {
+    // Reset all states to initial values
+    setMessage('');
+    setResponses([]);
+    setIsLoading(false);
+    setIsResponding(false);
+    setMessages([]);
+    setAiStatus({ 
+      text: 'Researching', 
+      state: 'researching',
+      showSteps: ['researching'] 
+    });
+    setShowResponse(false);
+    setIsExpanded(true);
+  };
+
   return (
     <div className={`app-container ${isResponding ? 'split-layout' : ''}`}>
       <div className={`background-container ${isResponding ? 'sidebar' : ''}`}>
         <div className="header">
-          <div className="logo">
+          <div className="logo" onClick={handleLogoClick}>
             <span>Hello AI</span>
           </div>
           <button className="connect-wallet-btn">
@@ -107,17 +123,17 @@ export default function Chatbot() {
               <p className="subtitle">Use one of the most common prompts below<br />or use your own to begin</p>
 
               <div className="prompt-cards">
-                <div className="card">
+                <div className="card" onClick={() => handlePromptClick("What is Solidity smart contract?")}>
                   <span className="icon">📝</span>
-                  <p>Write a to-do list for a personal project or task</p>
+                  <p>What is Solidity smart contract</p>
                 </div>
-                <div className="card">
+                <div className="card" onClick={() => handlePromptClick("What are the benefits of smart contracts?")}>
                   <span className="icon">📧</span>
-                  <p>Generate an email to job offer</p>
+                  <p>Benefits of smart contract</p>
                 </div>
-                <div className="card">
+                <div className="card" onClick={() => handlePromptClick("How does smart contract work?")}>
                   <span className="icon">ℹ️</span>
-                  <p>How does AI work in a technical capacity</p>
+                  <p>How does smart contract work</p>
                 </div>
               </div>
             </>
