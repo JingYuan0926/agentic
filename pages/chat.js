@@ -307,7 +307,7 @@ export default function SmartContractChat() {
         if (!walletAddress) {
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
-                content: "I notice you're not connected yet. Please connect your wallet first using the green button above, and then I'll help you interact with the contract." 
+                content: "Please connect your wallet first" 
             }]);
             return;
         }
@@ -318,12 +318,9 @@ export default function SmartContractChat() {
         setInput('');
 
         try {
-            // First, try to understand user intent via AI
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: [...messages, userMessage],
                     contractABI,
@@ -337,29 +334,26 @@ export default function SmartContractChat() {
 
             const data = await response.json();
             
-            // Handle new contract connection
+            // Handle contract connection like in int.js
             if (data.contractAddress && !contractABI) {
                 const abi = await getABI(data.contractAddress);
                 if (abi) {
                     setContractABI(abi);
                     setContractAddress(data.contractAddress);
-                    localStorage.setItem('contractContext', JSON.stringify({
-                        abi,
+                    
+                    // Save to localStorage
+                    localStorage.setItem('contractDetails', JSON.stringify({
                         address: data.contractAddress,
+                        abi: abi,
                         timestamp: Date.now()
                     }));
-                    
+
                     setMessages(prev => [...prev, { 
                         role: 'assistant', 
-                        content: `I've successfully connected to the contract at ${data.contractAddress}. I can help you interact with it - just tell me what you'd like to do in plain English!` 
+                        content: `Connected to contract: ${data.contractAddress}` 
                     }]);
-                } else {
-                    setMessages(prev => [...prev, { 
-                        role: 'assistant', 
-                        content: "I had trouble verifying that contract address. Could you please double-check it and try again?" 
-                    }]);
+                    return;
                 }
-                return;
             }
 
             // Handle function execution
@@ -391,14 +385,33 @@ export default function SmartContractChat() {
             }
 
         } catch (error) {
+            console.error('Error:', error);
             setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: "I encountered an unexpected issue. Could you please try rephrasing your request?"
+                role: 'system',
+                content: `Error: ${error.message}`
             }]);
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Load saved contract on mount (from int.js)
+    useEffect(() => {
+        const loadSavedContract = async () => {
+            const savedContract = localStorage.getItem('contractDetails');
+            if (savedContract) {
+                try {
+                    const { address, abi } = JSON.parse(savedContract);
+                    setContractABI(abi);
+                    setContractAddress(address);
+                } catch (error) {
+                    console.error('Error loading saved contract:', error);
+                }
+            }
+        };
+
+        loadSavedContract();
+    }, []);
 
     // ... Rest of the JSX remains the same as in int.js, but update the instructions
     return (
