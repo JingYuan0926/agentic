@@ -1,39 +1,51 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/**
- * @title Counter contract
- */
 contract Contract {
-    uint256 private _count;
+    // store the contract balance
+    uint256 public contractBalance;
+    
+    // mapping to store users balances
+    mapping(address => uint256) private balances;
+
+    // password for withdrawal
+    bytes32 private withdrawPassword = keccak256(abi.encodePacked("0099"));
 
     /**
-     * @dev Constructor that initializes the count to zero.
+     * @dev Function for depositing funds into the contract
      */
-    constructor() {
-        _count = 0;
+    function depositFunds() public payable {
+        // require that deposit is greater than 0
+        require(msg.value > 0, "Deposit must be greater than 0");
+        // update user's balance
+        balances[msg.sender] += msg.value;
+        // update contract balance
+        contractBalance += msg.value;
     }
 
     /**
-     * @dev Function that increments the counter by one.
+     * @dev Function for withdrawing funds from the contract
+     * @param _amount amount to withdraw
+     * @param _password password for withdrawal
      */
-    function increment() public {
-        _count += 1;
+    function withdrawFunds(uint256 _amount, string memory _password) public {
+        // verify password
+        require(keccak256(abi.encodePacked(_password)) == withdrawPassword, "Invalid password");
+        // require that the user has sufficient balance
+        require(balances[msg.sender] >= _amount, "Insufficient balance");
+        // subtract withdrawn amount from user's balance
+        balances[msg.sender] -= _amount;
+        // subtract withdrawn amount from contract balance
+        contractBalance -= _amount;
+        // transfer the funds
+        payable(msg.sender).transfer(_amount);
     }
 
     /**
-     * @dev Function that decrements the counter by one.
+     * @dev Function to get user balance
+     * @return user's balance
      */
-    function decrement() public {
-        require(_count > 0, "Counter is already at 0, can't decrement");
-        _count -= 1;
-    }
-
-    /**
-     * @dev Returns the current count
-     * @return uint256 The current count
-     */
-    function getCount() public view returns (uint256) {
-        return _count;
+    function getBalance() public view returns (uint256) {
+        return balances[msg.sender];
     }
 }

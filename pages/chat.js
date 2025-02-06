@@ -216,28 +216,89 @@ export default function SmartContractChat() {
         }
     };
 
-    const callContractFunction = async (functionName, params = []) => {
+    const getContractContext = async (abi) => {
+        try {
+            // Store contract interface details in localStorage
+            const functions = abi.filter(item => item.type === 'function').map(func => ({
+                name: func.name,
+                inputs: func.inputs,
+                outputs: func.outputs,
+                stateMutability: func.stateMutability
+            }));
+
+            const contractContext = {
+                functions,
+                lastInteraction: Date.now()
+            };
+
+            localStorage.setItem('contractContext', JSON.stringify(contractContext));
+            return contractContext;
+        } catch (error) {
+            console.error('Error parsing contract context:', error);
+            return null;
+        }
+    };
+
+    const callContractFunction = async (functionDetails) => {
         try {
             if (!signer || !contractAddress || !contractABI) {
-                throw new Error('Contract or signer not initialized');
+                return {
+                    success: false,
+                    message: "I notice the contract isn't connected yet. Could you please provide the contract address you'd like to interact with?"
+                };
             }
 
             const contract = new ethers.Contract(contractAddress, contractABI, signer);
-            const result = await contract[functionName](...params);
-            
-            if (result.wait) {
-                await result.wait();
-                if (contract[`get${functionName}`]) {
-                    const updatedValue = await contract[`get${functionName}`]();
-                    return updatedValue.toString();
+            const { name, params, value } = functionDetails;
+
+            let result;
+            try {
+                if (value) {
+                    // Handle payable functions
+                    result = await contract[name]({
+                        value: ethers.parseEther(value.toString())
+                    });
+                } else {
+                    // Handle regular functions
+                    result = await contract[name](...(params || []));
                 }
-                return 'Transaction successful';
+
+                if (result.wait) {
+                    await result.wait();
+                    return {
+                        success: true,
+                        message: `Transaction completed successfully! ${value ? `Deposited ${value} FLOW.` : ''}`
+                    };
+                }
+
+                return {
+                    success: true,
+                    message: `Current value: ${result.toString()}`
+                };
+            } catch (error) {
+                // Handle specific error cases
+                if (error.message.includes('insufficient funds')) {
+                    return {
+                        success: false,
+                        message: "I noticed you don't have enough FLOW in your wallet for this transaction. Please make sure you have enough funds and try again."
+                    };
+                }
+                if (error.message.includes('user rejected')) {
+                    return {
+                        success: false,
+                        message: "I see you declined the transaction. No worries! Let me know if you'd like to try again."
+                    };
+                }
+                return {
+                    success: false,
+                    message: "I encountered an issue while trying to execute that action. Could you please try again or rephrase your request?"
+                };
             }
-            
-            return result.toString();
         } catch (error) {
-            console.error('Error calling contract function:', error);
-            throw error;
+            return {
+                success: false,
+                message: "I'm having trouble understanding how to interact with this contract. Could you please verify the contract address and try again?"
+            };
         }
     };
 
@@ -245,8 +306,8 @@ export default function SmartContractChat() {
         if (!input.trim()) return;
         if (!walletAddress) {
             setMessages(prev => [...prev, { 
-                role: 'system', 
-                content: 'Please connect your wallet first' 
+                role: 'assistant', 
+                content: "I notice you're not connected yet. Please connect your wallet first using the green button above, and then I'll help you interact with the contract." 
             }]);
             return;
         }
@@ -257,13 +318,7 @@ export default function SmartContractChat() {
         setInput('');
 
         try {
-            // Check if this is a generation request
-            if (input.toLowerCase().includes('create') || input.toLowerCase().includes('generate')) {
-                await generateAndDeploy(input);
-                return;
-            }
-
-            // Otherwise, handle as contract interaction
+            // First, try to understand user intent via AI
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
@@ -272,85 +327,73 @@ export default function SmartContractChat() {
                 body: JSON.stringify({
                     messages: [...messages, userMessage],
                     contractABI,
-                    contractAddress
+                    contractAddress,
+                    context: {
+                        lastInteraction: localStorage.getItem('lastInteraction'),
+                        contractContext: localStorage.getItem('contractContext')
+                    }
                 }),
             });
 
             const data = await response.json();
             
-            // Handle contract address detection
+            // Handle new contract connection
             if (data.contractAddress && !contractABI) {
                 const abi = await getABI(data.contractAddress);
-                setContractABI(abi);
-                setContractAddress(data.contractAddress);
-                setMessages(prev => [...prev, { 
-                    role: 'assistant', 
-                    content: `Connected to contract: ${data.contractAddress}. I can help you interact with this contract. What would you like to do?` 
-                }]);
-                return;
-            }
-
-            // Handle multiple function executions
-            if (data.executeFunctions && data.executeFunctions.length > 0) {
-                try {
-                    let executionResults = [];
-                    
-                    // Execute each function sequentially
-                    for (const func of data.executeFunctions) {
-                        const result = await callContractFunction(
-                            func.name,
-                            func.params
-                        );
-                        executionResults.push({
-                            functionName: func.name,
-                            result: result
-                        });
-                    }
-                    
-                    // Let the AI interpret all results
-                    const interpretResponse = await fetch('/api/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            messages: [
-                                ...messages, 
-                                userMessage,
-                                {
-                                    role: 'system',
-                                    content: `Multiple functions were executed with results: ${JSON.stringify(executionResults)}`
-                                }
-                            ],
-                            contractABI,
-                            contractAddress
-                        }),
-                    });
-
-                    const interpretData = await interpretResponse.json();
+                if (abi) {
+                    setContractABI(abi);
+                    setContractAddress(data.contractAddress);
+                    localStorage.setItem('contractContext', JSON.stringify({
+                        abi,
+                        address: data.contractAddress,
+                        timestamp: Date.now()
+                    }));
                     
                     setMessages(prev => [...prev, { 
                         role: 'assistant', 
-                        content: interpretData.content
+                        content: `I've successfully connected to the contract at ${data.contractAddress}. I can help you interact with it - just tell me what you'd like to do in plain English!` 
                     }]);
-                } catch (error) {
-                    setMessages(prev => [...prev, {
-                        role: 'assistant',
-                        content: `Error executing functions: ${error.message}`
+                } else {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: "I had trouble verifying that contract address. Could you please double-check it and try again?" 
+                    }]);
+                }
+                return;
+            }
+
+            // Handle function execution
+            if (data.functionCall) {
+                const result = await callContractFunction(data.functionCall);
+                
+                // Store interaction context
+                localStorage.setItem('lastInteraction', JSON.stringify({
+                    function: data.functionCall,
+                    timestamp: Date.now()
+                }));
+
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: result.message
+                }]);
+
+                if (!result.success && data.alternativeSuggestion) {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: data.alternativeSuggestion
                     }]);
                 }
             } else {
                 setMessages(prev => [...prev, { 
                     role: 'assistant', 
-                    content: data.content 
+                    content: data.content || "I'm not quite sure what you'd like to do with the contract. Could you please rephrase your request?" 
                 }]);
             }
 
         } catch (error) {
-            console.error('Error:', error);
             setMessages(prev => [...prev, {
-                role: 'system',
-                content: `Error: ${error.message}`
+                role: 'assistant',
+                content: "I encountered an unexpected issue. Could you please try rephrasing your request?"
             }]);
         } finally {
             setIsLoading(false);
