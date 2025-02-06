@@ -6,7 +6,12 @@ export default function handler(req, res) {
     try {
         // Read the contract file
         const contractPath = path.join(process.cwd(), 'temp', 'contract.sol');
+        if (!fs.existsSync(contractPath)) {
+            throw new Error('Contract file not found');
+        }
+        
         const sourceCode = fs.readFileSync(contractPath, 'utf8');
+        console.log('Source code loaded:', sourceCode.substring(0, 100) + '...');
 
         const input = {
             language: 'Solidity',
@@ -20,7 +25,7 @@ export default function handler(req, res) {
                     enabled: false,
                     runs: 200
                 },
-                evmVersion: "London",
+                evmVersion: "london",
                 outputSelection: {
                     '*': {
                         '*': ['*']
@@ -29,9 +34,26 @@ export default function handler(req, res) {
             }
         };
 
-        const compiledContract = JSON.parse(solc.compile(JSON.stringify(input)));
-        const contract = compiledContract.contracts['contract.sol'].ExclusiveFund;
+        console.log('Compiling with settings:', JSON.stringify(input.settings, null, 2));
+        
+        const output = JSON.parse(solc.compile(JSON.stringify(input)));
+        
+        // Check for compilation errors
+        if (output.errors) {
+            const errors = output.errors.filter(error => error.severity === 'error');
+            if (errors.length > 0) {
+                console.error('Compilation errors:', errors);
+                throw new Error(errors[0].message);
+            }
+        }
 
+        const contract = output.contracts['contract.sol'].ExclusiveFund;
+        if (!contract) {
+            throw new Error('Contract not found in compilation output');
+        }
+
+        console.log('Compilation successful');
+        
         res.status(200).json({
             abi: contract.abi,
             bytecode: contract.evm.bytecode.object,
@@ -40,6 +62,9 @@ export default function handler(req, res) {
         });
     } catch (error) {
         console.error('Compilation error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message || 'Compilation failed',
+            details: error.toString()
+        });
     }
 } 

@@ -7,7 +7,6 @@ export default function Deploy() {
     const [deployedAddress, setDeployedAddress] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [verificationStatus, setVerificationStatus] = useState('');
     const { switchToSepolia } = useNetworkSwitch();
 
     const compileContract = async () => {
@@ -19,52 +18,6 @@ export default function Deploy() {
             return await response.json();
         } catch (err) {
             console.error('Compilation error:', err);
-            throw err;
-        }
-    };
-
-    const verifyContract = async (address) => {
-        try {
-            console.log('Sending verification request...');
-            const response = await fetch('/api/verify-contract', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ address }),
-            });
-
-            console.log('Got verification response:', response.status);
-            const result = await response.json();
-            console.log('Verification result:', result);
-            
-            if (!response.ok) {
-                if (result.error === 'Contract not deployed yet') {
-                    console.log('Contract not found, waiting 15s to retry...');
-                    // Wait and retry once
-                    await new Promise(resolve => setTimeout(resolve, 15000));
-                    return await verifyContract(address);
-                }
-                console.error('Verification error:', result);
-                throw new Error(result.error || 'Verification failed');
-            }
-
-            // Update verification status based on the result
-            if (result.result === 'Verified') {
-                console.log('Contract verified successfully!');
-                setVerificationStatus('Verified');
-            } else if (result.result.startsWith('Failed:')) {
-                console.log('Verification failed:', result.result);
-                setVerificationStatus(result.result);
-            } else {
-                console.log('Verification pending:', result.result);
-                setVerificationStatus('Pending verification');
-            }
-
-            return result;
-        } catch (err) {
-            console.error('Verification error details:', err);
-            setVerificationStatus('Failed');
             throw err;
         }
     };
@@ -82,6 +35,15 @@ export default function Deploy() {
             const signer = await provider.getSigner();
             
             console.log('Starting contract deployment...');
+            console.log('Deployment parameters:', {
+                contractName: 'ExclusiveFund',
+                compilerVersion: 'v0.8.20+commit.a1b79de6',
+                optimizerEnabled: false,
+                optimizerRuns: 200,
+                evmVersion: 'london',
+                licenseType: 'MIT'
+            });
+
             const factory = new ethers.ContractFactory(abi, bytecode, signer);
             const deployedContract = await factory.deploy();
             
@@ -92,6 +54,7 @@ export default function Deploy() {
             
             const contractAddress = await deployedContract.getAddress();
             console.log('Contract deployed at:', contractAddress);
+            console.log('Transaction hash:', receipt.hash);
             
             // Save to localStorage
             localStorage.setItem('contractABI', JSON.stringify(abi));
@@ -99,10 +62,6 @@ export default function Deploy() {
             
             setContract(deployedContract);
             setDeployedAddress(contractAddress);
-            
-            console.log('Starting contract verification...');
-            // Verify the contract immediately since we know it's deployed
-            await verifyContract(contractAddress);
             
         } catch (err) {
             console.error('Deployment error:', err);
@@ -117,12 +76,24 @@ export default function Deploy() {
             <div className="max-w-2xl mx-auto">
                 <h1 className="text-3xl font-bold mb-8">Deploy Smart Contract to Sepolia</h1>
                 
+                <div className="mb-8 p-4 bg-gray-100 rounded">
+                    <h2 className="text-xl font-semibold mb-4">Deployment Parameters</h2>
+                    <ul className="space-y-2">
+                        <li><strong>Contract Name:</strong> ExclusiveFund</li>
+                        <li><strong>Compiler Version:</strong> v0.8.20+commit.a1b79de6</li>
+                        <li><strong>Optimizer:</strong> Disabled</li>
+                        <li><strong>Optimizer Runs:</strong> 200</li>
+                        <li><strong>EVM Version:</strong> London</li>
+                        <li><strong>License:</strong> MIT</li>
+                    </ul>
+                </div>
+
                 <button
                     onClick={deployContract}
                     disabled={loading}
                     className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
                 >
-                    {loading ? 'Deploying & Verifying...' : 'Deploy Contract'}
+                    {loading ? 'Deploying...' : 'Deploy Contract'}
                 </button>
 
                 {error && (
@@ -134,8 +105,7 @@ export default function Deploy() {
                 {deployedAddress && (
                     <div className="mt-4">
                         <h2 className="text-xl font-semibold mb-2">
-                            Deployed Contract on Sepolia 
-                            {verificationStatus && ` (${verificationStatus})`}
+                            Deployed Contract on Sepolia
                         </h2>
                         <p className="font-mono bg-gray-100 p-4 rounded break-all">
                             {deployedAddress}
