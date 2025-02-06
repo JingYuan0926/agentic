@@ -111,19 +111,44 @@ contract Counter {
     try {
       // Compile contract
       setDeploymentLogs(prev => [...prev, "Compiling contract..."]);
-      const response = await fetch('/api/compile', {
+      const compileResponse = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contractCode }),
       });
 
-      const { abi, bytecode } = await response.json();
+      const compileData = await compileResponse.json();
+      
+      if (!compileData.success) {
+        throw new Error(compileData.error || 'Compilation failed. Check the contract code.');
+      }
+
+      if (!compileData.abi || !compileData.bytecode) {
+        throw new Error('Compilation succeeded but missing ABI or bytecode. Please try again.');
+      }
+
       setDeploymentLogs(prev => [...prev, "Contract compiled successfully"]);
 
       // Deploy contract using MetaMask
       setDeploymentLogs(prev => [...prev, "Deploying contract..."]);
-      const factory = new ethers.ContractFactory(abi, bytecode, signer);
-      const contract = await factory.deploy();
+      
+      // Create contract factory with explicit error handling
+      let factory;
+      try {
+        factory = new ethers.ContractFactory(compileData.abi, compileData.bytecode, signer);
+      } catch (error) {
+        throw new Error(`Failed to create contract factory: ${error.message}`);
+      }
+      
+      // Deploy with specific gas settings and error handling
+      let contract;
+      try {
+        contract = await factory.deploy({
+          gasLimit: 3000000
+        });
+      } catch (error) {
+        throw new Error(`Failed to deploy contract: ${error.message}`);
+      }
       
       setDeploymentLogs(prev => [...prev, "Waiting for deployment confirmation..."]);
       await contract.waitForDeployment();
@@ -148,8 +173,12 @@ contract Counter {
         }),
       });
 
-      if (verifyResponse.ok) {
+      const verifyData = await verifyResponse.json();
+      
+      if (verifyData.success) {
         setDeploymentLogs(prev => [...prev, "Contract verified successfully!"]);
+      } else {
+        setDeploymentLogs(prev => [...prev, `Verification note: ${verifyData.message}`]);
       }
 
       setDeploymentStatus('Deployment and verification complete!');
