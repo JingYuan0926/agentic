@@ -14,29 +14,26 @@ export default async function handler(req, res) {
     try {
         const { contractCode } = req.body;
 
-        // Write contract to file
-        const contractPath = path.join(process.cwd(), 'hardhat/contracts/Counter.sol');
+        // Write contract to Contract.sol
+        const contractPath = path.join(process.cwd(), 'hardhat/contracts/Contract.sol');
         await writeFile(contractPath, contractCode);
 
         console.log('Starting compilation process...');
         
-        // Compile with detailed output
+        // Compile
         const { stdout, stderr } = await execAsync('cd hardhat && npx hardhat compile --force');
         console.log('Compilation stdout:', stdout);
         if (stderr) console.error('Compilation stderr:', stderr);
 
-        // Read the compiled artifacts
-        const artifactsPath = path.join(process.cwd(), 'hardhat/artifacts/contracts/Counter.sol/Counter.json');
+        // Read the artifacts
+        const artifactsPath = path.join(process.cwd(), 'hardhat/artifacts/contracts/Contract.sol/Contract.json');
         
         if (!existsSync(artifactsPath)) {
-            console.error('Artifacts not found at:', artifactsPath);
-            throw new Error(`Compilation artifacts not found at expected path: ${artifactsPath}`);
+            throw new Error('Compilation failed - artifacts not found');
         }
 
-        const artifactsContent = await readFile(artifactsPath, 'utf8');
-        const artifacts = JSON.parse(artifactsContent);
+        const artifacts = JSON.parse(await readFile(artifactsPath, 'utf8'));
 
-        // Return the ABI and bytecode
         res.status(200).json({
             success: true,
             abi: artifacts.abi,
@@ -48,8 +45,7 @@ export default async function handler(req, res) {
         console.error('Compilation error:', error);
         res.status(500).json({
             success: false,
-            error: error.message,
-            details: error.stack
+            error: error.message
         });
     }
 } 

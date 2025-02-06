@@ -17,13 +17,7 @@ module.exports = {
   networks: {
     flow: {
       url: "https://flow-testnet.g.alchemy.com/v2/6U7t79S89NhHIspqDQ7oKGRWp5ZOfsNj",
-      chainId: 545,
-      verify: {
-        etherscan: {
-          apiUrl: "https://evm-testnet.flowscan.io/api",
-          browserURL: "https://evm-testnet.flowscan.io"
-        }
-      }
+      chainId: 545
     },
   },
   etherscan: {
@@ -40,10 +34,5 @@ module.exports = {
         }
       }
     ]
-  },
-  sourcify: {
-    enabled: true,
-    apiUrl: "https://sourcify.dev/server",
-    browserURL: "https://sourcify.dev"
   }
 };

@@ -9,34 +9,49 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { address, contractCode } = req.body;
+        const { address } = req.body;
 
-        // Verify the contract with explicit parameters
-        const verifyCommand = `cd hardhat && npx hardhat verify --network flow ${address} --contract contracts/Counter.sol:Counter --constructor-args ""`;
-        
+        // Verify using hardhat-verify with specific flags for Blockscout
+        const verifyCommand = `cd hardhat && npx hardhat verify --network flow ${address} --contract contracts/Contract.sol:Contract`;
         console.log('Executing verification command:', verifyCommand);
         
         const { stdout, stderr } = await execAsync(verifyCommand);
         console.log('Verification stdout:', stdout);
         if (stderr) console.error('Verification stderr:', stderr);
 
-        // Check if verification was successful
-        if (stdout.includes('Successfully verified') || stdout.includes('Already verified')) {
+        // Check for various success messages that Blockscout might return
+        if (stdout.includes('Successfully verified') || 
+            stdout.includes('Already verified') || 
+            stdout.includes('Contract source code already verified')) {
             res.status(200).json({
                 success: true,
                 message: 'Contract verified successfully',
-                details: stdout
+                explorerUrl: `https://evm-testnet.flowscan.io/address/${address}#code`
             });
         } else {
-            throw new Error('Verification failed: ' + stdout);
+            // If verification fails, try without the contract parameter
+            console.log('Trying alternative verification method...');
+            const { stdout: stdout2 } = await execAsync(`cd hardhat && npx hardhat verify --network flow ${address}`);
+            
+            if (stdout2.includes('Successfully verified') || 
+                stdout2.includes('Already verified') || 
+                stdout2.includes('Contract source code already verified')) {
+                res.status(200).json({
+                    success: true,
+                    message: 'Contract verified successfully (alternative method)',
+                    explorerUrl: `https://evm-testnet.flowscan.io/address/${address}#code`
+                });
+            } else {
+                throw new Error('Verification failed with both methods');
+            }
         }
 
     } catch (error) {
         console.error('Verification error:', error);
         res.status(500).json({
             success: false,
-            error: error.message,
-            message: 'Contract verification failed. Please verify manually on FlowScan.'
+            message: 'Contract verification failed. Please check the contract on FlowScan.',
+            explorerUrl: `https://evm-testnet.flowscan.io/address/${req.body.address}#code`
         });
     }
 } 

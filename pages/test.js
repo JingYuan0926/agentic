@@ -5,7 +5,7 @@ export default function ContractDeployer() {
   const [contractCode, setContractCode] = useState(`// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract Counter {
+contract Contract {
     uint256 public count;
 
     constructor() {
