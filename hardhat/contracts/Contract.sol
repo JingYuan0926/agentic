@@ -1,64 +1,45 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.20;
 
+/**
+ * @title Contract
+ * @dev Implements a basic counter with increment and decrement functionality
+ */
 contract Contract {
-    address public ownerA;
-    address public ownerB;
-    uint public requiredConfirmations = 2;
+    uint256 private count;
 
-    struct Transaction {
-        address to;
-        uint value;
-        bool executed;
-        uint confirmations;
-    }
-
-    mapping(uint => mapping(address => bool)) public isConfirmed;
-    Transaction[] public transactions;
-
-    event Deposit(address indexed sender, uint amount);
-    event TransactionSubmitted(uint indexed txId, address indexed to, uint value);
-    event TransactionConfirmed(uint indexed txId, address indexed owner);
-    event TransactionExecuted(uint indexed txId);
-
-    modifier onlyOwner() {
-        require(msg.sender == ownerA || msg.sender == ownerB, "Not an owner");
-        _;
-    }
-
+    /**
+     * @dev Constructor that sets the initial count to zero.
+     */
     constructor() {
-        ownerA = msg.sender;
-        ownerB = msg.sender; // For testing, setting both owners to deployer
+        count = 0;
     }
 
-    receive() external payable {
-        emit Deposit(msg.sender, msg.value);
+    /**
+     * @dev Function to get the current count
+     * @return Returns the current count
+     */
+    function getCount() public view returns (uint256) {
+        return count;
     }
 
-    function submitTransaction(address _to, uint _value) public onlyOwner {
-        transactions.push(Transaction({to: _to, value: _value, executed: false, confirmations: 0}));
-        emit TransactionSubmitted(transactions.length - 1, _to, _value);
+    /**
+     * @dev Function to increment the count by 1
+     * @return Returns the new count
+     */
+    function increment() public returns (uint256) {
+        count += 1;
+        return count;
     }
 
-    function confirmTransaction(uint _txId) public onlyOwner {
-        require(_txId < transactions.length, "Transaction does not exist");
-        require(!isConfirmed[_txId][msg.sender], "Already confirmed");
-        
-        isConfirmed[_txId][msg.sender] = true;
-        transactions[_txId].confirmations++;
-        emit TransactionConfirmed(_txId, msg.sender);
-    }
-
-    function executeTransaction(uint _txId) public onlyOwner {
-        require(_txId < transactions.length, "Transaction does not exist");
-        Transaction storage transaction = transactions[_txId];
-        require(transaction.confirmations >= requiredConfirmations, "Not enough confirmations");
-        require(!transaction.executed, "Transaction already executed");
-        
-        transaction.executed = true;
-        (bool success, ) = transaction.to.call{value: transaction.value}("");
-        require(success, "Transaction failed");
-        
-        emit TransactionExecuted(_txId);
+    /**
+     * @dev Function to decrement the count by 1
+     * @return Returns the new count
+     */
+    function decrement() public returns (uint256) {
+        require(count > 0, "Decrement failed, count is already at 0");
+        count -= 1;
+        return count;
     }
 }
