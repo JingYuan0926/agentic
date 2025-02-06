@@ -1,45 +1,39 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.20;
 
 /**
- * @title Contract
- * @dev Implements a basic counter with increment and decrement functionality
+ * @title Counter contract
  */
 contract Contract {
-    uint256 private count;
+    uint256 private _count;
 
     /**
-     * @dev Constructor that sets the initial count to zero.
+     * @dev Constructor that initializes the count to zero.
      */
     constructor() {
-        count = 0;
+        _count = 0;
     }
 
     /**
-     * @dev Function to get the current count
-     * @return Returns the current count
+     * @dev Function that increments the counter by one.
+     */
+    function increment() public {
+        _count += 1;
+    }
+
+    /**
+     * @dev Function that decrements the counter by one.
+     */
+    function decrement() public {
+        require(_count > 0, "Counter is already at 0, can't decrement");
+        _count -= 1;
+    }
+
+    /**
+     * @dev Returns the current count
+     * @return uint256 The current count
      */
     function getCount() public view returns (uint256) {
-        return count;
-    }
-
-    /**
-     * @dev Function to increment the count by 1
-     * @return Returns the new count
-     */
-    function increment() public returns (uint256) {
-        count += 1;
-        return count;
-    }
-
-    /**
-     * @dev Function to decrement the count by 1
-     * @return Returns the new count
-     */
-    function decrement() public returns (uint256) {
-        require(count > 0, "Decrement failed, count is already at 0");
-        count -= 1;
-        return count;
+        return _count;
     }
 }
