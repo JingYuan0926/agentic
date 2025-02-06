@@ -1,24 +1,64 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 contract Contract {
-    string public meme;
+    address public ownerA;
+    address public ownerB;
+    uint public requiredConfirmations = 2;
 
-    event MemeUpdated(string oldMeme, string newMeme);
+    struct Transaction {
+        address to;
+        uint value;
+        bool executed;
+        uint confirmations;
+    }
 
-    // Constructor to initialize the contract with a meme
+    mapping(uint => mapping(address => bool)) public isConfirmed;
+    Transaction[] public transactions;
+
+    event Deposit(address indexed sender, uint amount);
+    event TransactionSubmitted(uint indexed txId, address indexed to, uint value);
+    event TransactionConfirmed(uint indexed txId, address indexed owner);
+    event TransactionExecuted(uint indexed txId);
+
+    modifier onlyOwner() {
+        require(msg.sender == ownerA || msg.sender == ownerB, "Not an owner");
+        _;
+    }
+
     constructor() {
-        meme = "Why did the smart contract break up? It needed more gas!";
+        ownerA = msg.sender;
+        ownerB = msg.sender; // For testing, setting both owners to deployer
     }
 
-    // Function to update the meme
-    function setMeme(string calldata newMeme) public {
-        emit MemeUpdated(meme, newMeme);
-        meme = newMeme;
+    receive() external payable {
+        emit Deposit(msg.sender, msg.value);
     }
 
-    // Function to retrieve a funny message
-    function laugh() public pure returns (string memory) {
-        return "Hahaha, that's hilarious!";
+    function submitTransaction(address _to, uint _value) public onlyOwner {
+        transactions.push(Transaction({to: _to, value: _value, executed: false, confirmations: 0}));
+        emit TransactionSubmitted(transactions.length - 1, _to, _value);
+    }
+
+    function confirmTransaction(uint _txId) public onlyOwner {
+        require(_txId < transactions.length, "Transaction does not exist");
+        require(!isConfirmed[_txId][msg.sender], "Already confirmed");
+        
+        isConfirmed[_txId][msg.sender] = true;
+        transactions[_txId].confirmations++;
+        emit TransactionConfirmed(_txId, msg.sender);
+    }
+
+    function executeTransaction(uint _txId) public onlyOwner {
+        require(_txId < transactions.length, "Transaction does not exist");
+        Transaction storage transaction = transactions[_txId];
+        require(transaction.confirmations >= requiredConfirmations, "Not enough confirmations");
+        require(!transaction.executed, "Transaction already executed");
+        
+        transaction.executed = true;
+        (bool success, ) = transaction.to.call{value: transaction.value}("");
+        require(success, "Transaction failed");
+        
+        emit TransactionExecuted(_txId);
     }
 }
