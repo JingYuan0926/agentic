@@ -7,12 +7,17 @@ export default async function handler(req, res) {
 
     try {
         const { content } = req.body;
+        
+        // Get AI response
         const response = await ollama.chat({
             model: 'deepseek-r1:1.5b',
             messages: [{ role: 'user', content }]
         });
 
-        const aiResponse = response.message.content.split('</think>')[1]?.trim() || response.message.content;
+        // Clean up response
+        const aiResponse = response.message.content.split('</think>')[1]?.trim() 
+            || response.message.content;
+
         res.status(200).json({ response: aiResponse });
     } catch (error) {
         console.error('AI Response Error:', error);

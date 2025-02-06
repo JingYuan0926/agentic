@@ -1,7 +1,8 @@
+'use client'
 import dynamic from 'next/dynamic';
 import Chat from '../components/Chat';
 
-// Dynamically import Header with ssr disabled to prevent hydration errors
+// Dynamically import Header with ssr disabled
 const Header = dynamic(() => import('../components/Header'), {
     ssr: false
 });

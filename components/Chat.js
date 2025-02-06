@@ -8,10 +8,22 @@ function Chat() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [hasWallet, setHasWallet] = useState(false);
     const messagesEndRef = useRef(null);
     const { walletProvider } = useWeb3ModalProvider();
     const { address, isConnected } = useWeb3ModalAccount();
     const [contractService, setContractService] = useState(null);
+
+    // Check for wallet on mount
+    useEffect(() => {
+        const checkWallet = async () => {
+            if (typeof window !== 'undefined' && window.ethereum) {
+                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                setHasWallet(accounts && accounts.length > 0);
+            }
+        };
+        checkWallet();
+    }, []);
 
     useEffect(() => {
         if (walletProvider) {
@@ -129,13 +141,13 @@ function Chat() {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder={isConnected ? "Type your message..." : "Please connect wallet first"}
-                            disabled={!isConnected || isLoading}
+                            placeholder="Type your message..."
+                            disabled={isLoading}
                             className="flex-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         />
                         <button
                             type="submit"
-                            disabled={!isConnected || isLoading}
+                            disabled={isLoading}
                             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         >
                             {isLoading ? 'Sending...' : 'Send'}

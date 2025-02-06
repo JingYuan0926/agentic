@@ -1,34 +1,37 @@
 import { ethers } from 'ethers';
-
-const CONTRACT_ADDRESS = '0xDe1e04366D466bd9605447c9536fc0c907DCfB55';
-const HOLESKY_RPC = 'https://ethereum-holesky.publicnode.com';
-
-const ABI = [
-    'function createNewTask(string memory contents) external returns ((string contents, uint32 taskCreatedBlock))',
-    'function respondToTask((string contents, uint32 taskCreatedBlock) task, uint32 referenceTaskIndex, string response, bytes memory signature) external',
-    'event NewTaskCreated(uint32 indexed taskIndex, (string contents, uint32 taskCreatedBlock) task)',
-    'event TaskResponseReceived(uint32 indexed taskIndex, string response)'
-];
+import { AVS_CONTRACT_ADDRESS, HOLESKY_RPC, AVS_ABI } from '../utils/contexts';
 
 class ContractService {
     constructor() {
         if (!window.ethereum) {
             throw new Error('MetaMask not found! Please install MetaMask.');
         }
-        // Initialize with MetaMask provider
+        // Initialize with MetaMask provider for user transactions
         this.provider = new ethers.BrowserProvider(window.ethereum);
-        this.contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, this.provider);
+        this.contract = new ethers.Contract(AVS_CONTRACT_ADDRESS, AVS_ABI, this.provider);
+    }
+
+    async verifyOperator() {
+        try {
+            const isRegistered = await this.contract.operatorRegistered(this.operatorWallet.address);
+            if (!isRegistered) {
+                console.error('Operator is not registered:', this.operatorWallet.address);
+                throw new Error('Operator not registered');
+            }
+            console.log('Operator verified:', this.operatorWallet.address);
+        } catch (error) {
+            console.error('Failed to verify operator:', error);
+            throw error;
+        }
     }
 
     async ensureHoleskyNetwork() {
         try {
-            // Request network switch to Holesky
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x4268' }], // 17000 in hex
+                params: [{ chainId: '0x4268' }],
             });
         } catch (switchError) {
-            // If Holesky network is not added, add it
             if (switchError.code === 4902) {
                 await window.ethereum.request({
                     method: 'wallet_addEthereumChain',
@@ -46,15 +49,6 @@ class ContractService {
         }
     }
 
-    async createSignature(signer, response, contents) {
-        const messageHash = ethers.solidityPackedKeccak256(
-            ['string', 'string'],
-            [response, contents]
-        );
-        const signature = await signer.signMessage(ethers.getBytes(messageHash));
-        return signature;
-    }
-
     async createTask(content) {
         try {
             await this.ensureHoleskyNetwork();
@@ -68,7 +62,6 @@ class ContractService {
             const receipt = await tx.wait();
             console.log('Receipt:', receipt);
 
-            // Parse events
             let taskIndex;
             for (const log of receipt.logs) {
                 try {
@@ -107,24 +100,43 @@ class ContractService {
         }
     }
 
+    async createSignature(response, contents) {
+        const messageHash = ethers.solidityPackedKeccak256(
+            ['string', 'string'],
+            [response, contents]
+        );
+        const messageHashBytes = ethers.getBytes(messageHash);
+        const signature = await this.operatorWallet.signMessage(messageHashBytes);
+        return signature;
+    }
+
     async respondToTask(task, taskIndex, response) {
         try {
-            await this.ensureHoleskyNetwork();
-            const signer = await this.provider.getSigner();
-            
-            console.log('Responding to task on Holesky:', { task, taskIndex, response });
-            const signature = await this.createSignature(signer, response, task.contents);
-            const contractWithSigner = this.contract.connect(signer);
-            
-            const tx = await contractWithSigner.respondToTask(
-                task,
-                taskIndex,
-                response,
-                signature
-            );
-            
-            const receipt = await tx.wait();
-            return tx.hash;
+            console.log('Responding to task:', { task, taskIndex, response });
+
+            // Get operator signature and transaction from backend
+            const operatorResponse = await fetch('/api/operator-response', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    task: {
+                        contents: task.contents,
+                        taskCreatedBlock: Number(task.taskCreatedBlock)
+                    },
+                    taskIndex: Number(taskIndex),
+                    response
+                })
+            });
+
+            if (!operatorResponse.ok) {
+                const error = await operatorResponse.json();
+                throw new Error(error.message || 'Failed to get operator response');
+            }
+
+            const { txHash } = await operatorResponse.json();
+            return txHash;
         } catch (error) {
             console.error('Error responding to task:', error);
             throw error;
