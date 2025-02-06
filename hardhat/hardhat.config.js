@@ -5,10 +5,10 @@ require("dotenv").config();
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: "0.8.20",
+  defaultNetwork: "flow",
   networks: {
     flow: {
-      url: process.env.RPC_URL,
-      accounts: [process.env.PRIVATE_KEY],
+      url: "https://flow-testnet.g.alchemy.com/v2/6U7t79S89NhHIspqDQ7oKGRWp5ZOfsNj",
       chainId: 545
     },
   },
@@ -21,7 +21,6 @@ module.exports = {
         network: "flow",
         chainId: 545,
         urls: {
-          // Updated URLs to match Flow's EVM testnet Blockscout
           apiURL: "https://evm-testnet.flowscan.io/api",
           browserURL: "https://evm-testnet.flowscan.io"
         }

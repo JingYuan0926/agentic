@@ -1,18 +1,35 @@
+const { ethers } = require("hardhat");
+
 async function main() {
-    const Counter = await ethers.getContractFactory("Counter");
-    const counter = await Counter.deploy();
-    
-    // Wait for the deployment transaction to be mined
-    await counter.waitForDeployment();
-  
-    // Get the contract address
-    const address = await counter.getAddress();
-    console.log("Counter deployed to:", address);
-  }
-  
-  main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
+    try {
+        // Get the Contract Factory
+        const Counter = await ethers.getContractFactory("Counter");
+        console.log("Deploying Counter...");
+        
+        // Deploy the contract
+        const counter = await Counter.deploy();
+        console.log("Waiting for deployment transaction...");
+        
+        // Wait for deployment to complete
+        await counter.waitForDeployment();
+        const address = await counter.getAddress();
+        
+        console.log("Counter deployed to:", address);
+        return address;
+    } catch (error) {
+        console.error("Deployment error:", error);
+        throw error;
+    }
+}
+
+// Only execute if running directly
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch((error) => {
+            console.error(error);
+            process.exit(1);
+        });
+}
+
+module.exports = main;
