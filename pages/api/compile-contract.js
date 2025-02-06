@@ -20,7 +20,7 @@ export default function handler(req, res) {
                     enabled: false,
                     runs: 200
                 },
-                evmVersion: "shanghai",
+                evmVersion: "London",
                 outputSelection: {
                     '*': {
                         '*': ['*']
