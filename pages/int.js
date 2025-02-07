@@ -102,23 +102,22 @@ export default function ContractInteraction() {
         }
     };
 
-    const callContractFunction = async (functionName, params = []) => {
+    const callContractFunction = async (functionName, params = [], value = null) => {
         try {
             if (!signer || !contractAddress || !contractABI) {
                 throw new Error('Contract or signer not initialized');
             }
 
             const contract = new ethers.Contract(contractAddress, contractABI, signer);
-            const result = await contract[functionName](...params);
+            
+            // Add overrides object if there's a value to send
+            const overrides = value ? { value: ethers.parseEther(value) } : {};
+            
+            const result = await contract[functionName](...params, overrides);
             
             // If result is a transaction, wait for it to be mined
             if (result.wait) {
                 await result.wait();
-                // For state-changing functions, we need to make an additional call to get the updated value
-                if (functionName === 'increment' || functionName === 'decrement') {
-                    const count = await contract.getCount();
-                    return count.toString();
-                }
                 return 'Transaction successful';
             }
             
