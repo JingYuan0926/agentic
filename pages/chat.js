@@ -295,7 +295,7 @@ export default function SmartContractChat() {
             const contract = new ethers.Contract(contractAddress, contractABI, signer);
             const { name, params = [], value = null } = functionDetails;
 
-            // Find the function in ABI
+            // Find function in ABI
             const abiFunction = contractABI.find(f => 
                 f.type === 'function' && f.name === name
             );
@@ -307,58 +307,103 @@ export default function SmartContractChat() {
                 };
             }
 
+            // Special handling for payable functions
+            const isPayable = abiFunction.stateMutability === 'payable';
+            let txOptions = {};
+
             // Convert parameters based on their ABI types
             const convertedParams = params.map((param, index) => {
                 const input = abiFunction.inputs[index];
-                // Only convert numeric values that are actually numbers
-                if ((input.type === 'uint256' || input.type === 'uint') && !isNaN(param)) {
-                    try {
-                        return ethers.parseUnits(param.toString(), 'ether');
-                    } catch (e) {
-                        return param;
+                if (!input) return param;
+
+                try {
+                    if (input.type === 'uint256' || input.type === 'uint') {
+                        // For token amounts, use parseUnits with proper decimals
+                        if (input.name.toLowerCase().includes('amount') || 
+                            input.name.toLowerCase().includes('value')) {
+                            // If this is the amount for a payable function, set it as value
+                            if (isPayable && index === 0) {
+                                txOptions.value = ethers.parseEther(param.toString());
+                                return txOptions.value;
+                            }
+                            return ethers.parseUnits(param.toString(), 18); // Using 18 decimals as default
+                        }
+                        return ethers.getBigInt(param.toString());
                     }
+                    // For address parameters
+                    if (input.type === 'address') {
+                        return ethers.getAddress(param); // Ensures proper address format
+                    }
+                    return param;
+                } catch (error) {
+                    console.error(`Parameter conversion error for ${input.name}:`, error);
+                    throw new Error(`Invalid parameter for ${input.name}: ${param}`);
                 }
-                return param;
             });
 
-            let attempts = 0;
-            const maxAttempts = 3;
+            // Debug logging
+            console.log('Contract call details:', {
+                functionName: name,
+                convertedParams,
+                txOptions,
+                isPayable,
+                abiFunction
+            });
 
-            while (attempts < maxAttempts) {
-                try {
-                    const txOptions = {};
-                    // Only add value if it's a valid number
-                    if (value && !isNaN(value)) {
-                        txOptions.value = ethers.parseEther(value.toString());
-                    }
+            // Execute the contract call
+            try {
+                const result = isPayable
+                    ? await contract[name](...convertedParams, txOptions)
+                    : await contract[name](...convertedParams);
 
-                    const result = Object.keys(txOptions).length > 0
-                        ? await contract[name](...convertedParams, txOptions)
-                        : await contract[name](...convertedParams);
-
-                    if (result.wait) {
-                        await result.wait();
-                        return {
-                            success: true,
-                            message: `Transaction completed successfully! ${value ? `Sent ${value} FLOW.` : ''}`
-                        };
-                    }
-
+                if (result.wait) {
+                    const receipt = await result.wait();
+                    console.log('Transaction receipt:', receipt);
                     return {
                         success: true,
-                        message: `Result: ${result.toString()}`
+                        message: `Transaction completed successfully! ${txOptions.value ? 
+                            `Sent ${ethers.formatEther(txOptions.value)} FLOW.` : ''}`
                     };
-                } catch (error) {
-                    attempts++;
-                    if (attempts === maxAttempts || shouldNotRetry(error)) {
-                        return handleContractError(error);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 2000));
                 }
+
+                // Format result for view functions
+                const formattedResult = abiFunction.outputs?.length === 1 &&
+                    (abiFunction.outputs[0].type === 'uint256' || abiFunction.outputs[0].type === 'uint')
+                    ? ethers.formatUnits(result, 18)
+                    : result.toString();
+
+                return {
+                    success: true,
+                    message: `Result: ${formattedResult}`
+                };
+
+            } catch (error) {
+                console.error('Execution error:', error);
+                // Provide more detailed error message
+                const errorMessage = error.reason || 
+                                   error.data?.message || 
+                                   error.message || 
+                                   'Transaction failed';
+                
+                if (errorMessage.includes('Incorrect amount')) {
+                    return {
+                        success: false,
+                        message: `Please ensure the amount matches exactly what the contract expects. Error: ${errorMessage}`
+                    };
+                }
+
+                return {
+                    success: false,
+                    message: `Error: ${errorMessage}`
+                };
             }
+
         } catch (error) {
             console.error('Contract call error:', error);
-            return handleContractError(error);
+            return {
+                success: false,
+                message: `Error: ${error.reason || error.message}`
+            };
         }
     };
 
