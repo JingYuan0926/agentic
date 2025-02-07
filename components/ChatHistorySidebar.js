@@ -1,10 +1,22 @@
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
+import { TrashIcon } from '@heroicons/react/24/outline';
+import nillionService from '../services/nillionService.js';
 
-function ChatHistorySidebar({ onChatSelect, isLoading = false, chats = [] }) {
+function ChatHistorySidebar({ onChatSelect, onChatDelete, isLoading = false, chats = [] }) {
     const { address } = useWeb3ModalAccount();
 
     const formatDate = (timestamp) => {
         return new Date(timestamp).toLocaleDateString();
+    };
+
+    const handleDelete = async (e, chat) => {
+        e.stopPropagation(); // Prevent chat selection when clicking delete
+        try {
+            await nillionService.deleteChat(address, chat.id);
+            onChatDelete(chat.id);
+        } catch (error) {
+            console.error('Failed to delete chat:', error);
+        }
     };
 
     return (
@@ -24,18 +36,29 @@ function ChatHistorySidebar({ onChatSelect, isLoading = false, chats = [] }) {
                 ) : (
                     <div className="space-y-2">
                         {chats.map((chat) => (
-                            <button
+                            <div
                                 key={chat.id}
-                                onClick={() => onChatSelect(chat)}
-                                className="w-full text-left p-2 rounded hover:bg-gray-100 transition-colors"
+                                className="flex items-center group"
                             >
-                                <div className="font-medium truncate text-black">
-                                    {chat.title}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                    {formatDate(chat.timestamp)}
-                                </div>
-                            </button>
+                                <button
+                                    onClick={() => onChatSelect(chat)}
+                                    className="flex-1 text-left p-2 rounded hover:bg-gray-100 transition-colors"
+                                >
+                                    <div className="font-medium truncate text-black">
+                                        {chat.title}
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                        {formatDate(chat.timestamp)}
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={(e) => handleDelete(e, chat)}
+                                    className="p-2 text-red-500 hover:text-red-700 transition-colors"
+                                    title="Delete chat"
+                                >
+                                    <TrashIcon className="h-5 w-5" />
+                                </button>
+                            </div>
                         ))}
                     </div>
                 )}

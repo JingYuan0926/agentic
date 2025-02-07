@@ -48,6 +48,13 @@ export default function Home() {
     setSelectedChatId(newChat.chatId);
   };
 
+  const handleChatDelete = (chatId) => {
+    setChats(prev => prev.filter(chat => chat.id !== chatId));
+    if (selectedChatId === chatId) {
+      setSelectedChatId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen">
       <Header />
@@ -56,6 +63,7 @@ export default function Home() {
           chats={chats}
           isLoading={isLoading}
           onChatSelect={handleChatSelect}
+          onChatDelete={handleChatDelete}
         />
         <div className="flex-1">
           <Chat 

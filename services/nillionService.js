@@ -128,6 +128,27 @@ class NillionService {
 
     return response.json();
   }
+
+  async deleteChat(walletAddress, chatId) {
+    const response = await fetch('/api/nillion', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'deleteChat',
+        walletAddress,
+        chatId,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete chat');
+    }
+
+    return response.json();
+  }
 }
 
 const nillionService = new NillionService();

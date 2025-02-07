@@ -90,6 +90,15 @@ export default async function handler(req, res) {
         );
         return res.status(200).json(sortedMessages);
 
+      case 'deleteChat':
+        const deleteFilter = {
+          walletAddress,
+          chatId
+        };
+        
+        const deleteResult = await wrapper.deleteDataFromNodes(deleteFilter);
+        return res.status(200).json({ success: true });
+
       default:
         return res.status(400).json({ error: 'Invalid action' });
     }
