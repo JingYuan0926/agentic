@@ -1,62 +1,29 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
-import { useWeb3ModalProvider, useWeb3ModalAccount } from '@web3modal/ethers/react';
-import ContractService from '../services/contractService';
-import { BrowserProvider } from 'ethers';
+import nillionService from '../services/nillionService';
 
 function Chat() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [hasWallet, setHasWallet] = useState(false);
     const messagesEndRef = useRef(null);
-    const { walletProvider } = useWeb3ModalProvider();
-    const { address, isConnected } = useWeb3ModalAccount();
-    const [contractService, setContractService] = useState(null);
-
-    // Check for wallet on mount
-    useEffect(() => {
-        const checkWallet = async () => {
-            if (typeof window !== 'undefined' && window.ethereum) {
-                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                setHasWallet(accounts && accounts.length > 0);
-            }
-        };
-        checkWallet();
-    }, []);
-
-    useEffect(() => {
-        if (walletProvider) {
-            const service = new ContractService(walletProvider);
-            setContractService(service);
-
-            // Listen for new tasks and responses
-            const unsubscribeTask = service.listenToNewTasks((taskIndex, task) => {
-                console.log('New task created:', taskIndex, task);
-            });
-
-            const unsubscribeResponse = service.listenToResponses((taskIndex, response) => {
-                setMessages(prev => {
-                    // Find the loading message and replace it
-                    const newMessages = prev.filter(msg => !msg.isLoading);
-                    return [...newMessages, {
-                        role: 'assistant',
-                        content: response,
-                        taskIndex
-                    }];
-                });
-            });
-
-            return () => {
-                unsubscribeTask();
-                unsubscribeResponse();
-            };
-        }
-    }, [walletProvider]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
+
+    useEffect(() => {
+        // Load existing messages from Nillion
+        const loadMessages = async () => {
+            try {
+                const storedMessages = await nillionService.getMessages();
+                setMessages(storedMessages);
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+            }
+        };
+        loadMessages();
+    }, []);
 
     useEffect(() => {
         scrollToBottom();
@@ -64,36 +31,36 @@ function Chat() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim() || !isConnected || !contractService) return;
+        if (!input.trim()) return;
 
         setIsLoading(true);
         try {
-            // Create task on blockchain
-            const provider = new BrowserProvider(walletProvider);
-            const signer = await provider.getSigner();
-            const { hash, task, taskIndex } = await contractService.createTask(input);
-
-            // Update messages with user input and transaction hash
-            setMessages(prev => [...prev, {
-                role: 'user',
-                content: `${input}\n\nTransaction submitted! Hash: ${hash}`
-            }]);
+            // Store user message in Nillion
+            await nillionService.storeMessage('user', input);
 
             // Get AI response
-            const aiResponse = await contractService.getAIResponse(input);
-            
-            // Submit AI response to blockchain
-            const responseHash = await contractService.respondToTask(
-                task,
-                taskIndex,
-                aiResponse
-            );
+            const response = await fetch('/api/ai-response', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    content: input
+                }),
+            });
 
-            // Update messages with AI response and its transaction hash
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `${aiResponse}\n\nTransaction submitted! Hash: ${responseHash}`
-            }]);
+            if (!response.ok) {
+                throw new Error('Failed to get response');
+            }
+
+            const data = await response.json();
+            
+            // Store AI response in Nillion
+            await nillionService.storeMessage('assistant', data.response);
+
+            // Refresh messages from Nillion
+            const updatedMessages = await nillionService.getMessages();
+            setMessages(updatedMessages);
 
         } catch (error) {
             console.error('Error:', error);
