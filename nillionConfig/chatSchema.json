@@ -1,6 +1,5 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Chat Messages",
   "type": "array",
   "items": {
     "type": "object",
@@ -9,6 +8,17 @@
         "type": "string",
         "format": "uuid",
         "coerce": true
+      },
+      "walletAddress": {
+        "type": "string"
+      },
+      "chatId": {
+        "type": "string",
+        "format": "uuid",
+        "coerce": true
+      },
+      "title": {
+        "type": "string"
       },
       "role": {
         "type": "string",
@@ -25,9 +35,11 @@
       },
       "timestamp": {
         "type": "string",
-        "format": "date-time"
+        "format": "date-time",
+        "coerce": true
       }
     },
-    "required": ["_id", "role", "content", "timestamp"]
+    "required": ["_id", "walletAddress", "chatId", "role", "content", "timestamp"],
+    "additionalProperties": false
   }
 } 

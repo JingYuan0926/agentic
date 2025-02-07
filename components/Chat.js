@@ -1,8 +1,10 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
+import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import nillionService from '../services/nillionService.js';
 
-function Chat() {
+function Chat({ selectedChatId, onNewChat }) {
+    const { address } = useWeb3ModalAccount();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -13,17 +15,19 @@ function Chat() {
     };
 
     useEffect(() => {
-        // Load existing messages from Nillion
-        const loadMessages = async () => {
-            try {
-                const storedMessages = await nillionService.getMessages();
-                setMessages(storedMessages);
-            } catch (error) {
-                console.error('Failed to load messages:', error);
-            }
-        };
-        loadMessages();
-    }, []);
+        if (address && selectedChatId) {
+            loadMessages();
+        }
+    }, [address, selectedChatId]);
+
+    const loadMessages = async () => {
+        try {
+            const messages = await nillionService.getChatMessages(address, selectedChatId);
+            setMessages(messages);
+        } catch (error) {
+            console.error('Failed to load messages:', error);
+        }
+    };
 
     useEffect(() => {
         scrollToBottom();
@@ -31,36 +35,37 @@ function Chat() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim()) return;
+        if (!input.trim() || !address) return;
 
         setIsLoading(true);
         try {
-            // Store user message in Nillion
-            await nillionService.storeMessage('user', input);
+            let currentChatId = selectedChatId;
+
+            // Create new chat if needed
+            if (!currentChatId) {
+                const newChat = await nillionService.createNewChat(address, input);
+                currentChatId = newChat.chatId;
+                onNewChat(newChat);
+            }
+
+            // Store user message
+            await nillionService.storeMessage(address, currentChatId, 'user', input);
 
             // Get AI response
             const response = await fetch('/api/ai-response', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    content: input
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: input }),
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to get response');
-            }
-
+            if (!response.ok) throw new Error('Failed to get response');
             const data = await response.json();
             
-            // Store AI response in Nillion
-            await nillionService.storeMessage('assistant', data.response);
+            // Store AI response
+            await nillionService.storeMessage(address, currentChatId, 'assistant', data.response);
 
-            // Refresh messages from Nillion
-            const updatedMessages = await nillionService.getMessages();
-            setMessages(updatedMessages);
+            // Refresh messages
+            await loadMessages();
 
         } catch (error) {
             console.error('Error:', error);

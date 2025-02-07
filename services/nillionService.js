@@ -1,4 +1,5 @@
 import { SecretVaultWrapper } from 'nillion-sv-wrappers';
+import { v4 as uuidv4 } from 'uuid';
 
 class NillionService {
   constructor() {
@@ -37,7 +38,10 @@ class NillionService {
     }
   }
 
-  async storeMessage(role, content) {
+  async createNewChat(walletAddress, firstMessage) {
+    const chatId = uuidv4();
+    const title = firstMessage.substring(0, 30) + '...';
+
     const response = await fetch('/api/nillion', {
       method: 'POST',
       headers: {
@@ -45,6 +49,32 @@ class NillionService {
       },
       body: JSON.stringify({
         action: 'store',
+        walletAddress,
+        chatId,
+        title,
+        role: 'user',
+        content: firstMessage,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create chat');
+    }
+
+    return { chatId, title };
+  }
+
+  async storeMessage(walletAddress, chatId, role, content) {
+    const response = await fetch('/api/nillion', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'store',
+        walletAddress,
+        chatId,
         role,
         content,
       }),
@@ -58,14 +88,36 @@ class NillionService {
     return response.json();
   }
 
-  async getMessages() {
+  async getChatList(walletAddress) {
     const response = await fetch('/api/nillion', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        action: 'get',
+        action: 'getChatList',
+        walletAddress,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get chat list');
+    }
+
+    return response.json();
+  }
+
+  async getChatMessages(walletAddress, chatId) {
+    const response = await fetch('/api/nillion', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'getChatMessages',
+        walletAddress,
+        chatId,
       }),
     });
 

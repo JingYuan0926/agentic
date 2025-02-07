@@ -1,29 +1,69 @@
 'use client'
-import dynamic from 'next/dynamic';
+import { useState, useEffect } from 'react';
+import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import Chat from '../components/Chat';
 import ChatHistorySidebar from '../components/ChatHistorySidebar';
-
-// Dynamically import Header with ssr disabled
-const Header = dynamic(() => import('../components/Header'), {
-    ssr: false
-});
+import Header from '../components/Header';
+import nillionService from '../services/nillionService.js';
 
 export default function Home() {
-    return (
-        <div className="min-h-screen bg-white">
-            <Header />
-            <div className="flex">
-                <ChatHistorySidebar 
-                    isLoading={false}
-                    chats={[
-                      
-                    ]}
-                    onChatSelect={(chat) => console.log('Selected chat:', chat)}
-                />
-                <div className="flex-1">
-                    <Chat />
-                </div>
-            </div>
+  const { address } = useWeb3ModalAccount();
+  const [selectedChatId, setSelectedChatId] = useState(null);
+  const [chats, setChats] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load chat list when wallet connects
+  useEffect(() => {
+    if (address) {
+      loadChats();
+    } else {
+      setChats([]);
+      setSelectedChatId(null);
+    }
+  }, [address]);
+
+  const loadChats = async () => {
+    if (!address) return;
+    setIsLoading(true);
+    try {
+      const chatList = await nillionService.getChatList(address);
+      setChats(chatList);
+    } catch (error) {
+      console.error('Failed to load chats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChatSelect = (chat) => {
+    setSelectedChatId(chat.id);
+  };
+
+  const handleNewChat = (newChat) => {
+    setChats(prev => [...prev, {
+      id: newChat.chatId,
+      title: newChat.title,
+      timestamp: new Date().toISOString()
+    }]);
+    setSelectedChatId(newChat.chatId);
+  };
+
+  return (
+    <div className="flex flex-col h-screen">
+      <Header />
+      <div className="flex flex-1 overflow-hidden">
+        <ChatHistorySidebar 
+          chats={chats}
+          isLoading={isLoading}
+          onChatSelect={handleChatSelect}
+        />
+        <div className="flex-1">
+          <Chat 
+            selectedChatId={selectedChatId}
+            onNewChat={handleNewChat}
+          />
         </div>
-    );
+      </div>
+    </div>
+  );
 }

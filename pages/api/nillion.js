@@ -1,4 +1,5 @@
 import { SecretVaultWrapper } from 'nillion-sv-wrappers';
+import { v4 as uuidv4 } from 'uuid';
 
 const config = {
   orgCredentials: {
@@ -44,11 +45,15 @@ export default async function handler(req, res) {
 
   try {
     const wrapper = await initNillion();
-    const { action, role, content } = req.body;
+    const { action, walletAddress, chatId, role, content, title } = req.body;
 
     switch (action) {
       case 'store':
         const message = [{
+          _id: uuidv4(),
+          walletAddress,
+          chatId,
+          title,
           role,
           content: { $allot: content },
           timestamp: new Date().toISOString()
@@ -56,8 +61,30 @@ export default async function handler(req, res) {
         const result = await wrapper.writeToNodes(message);
         return res.status(200).json(result);
 
-      case 'get':
-        const messages = await wrapper.readFromNodes({});
+      case 'getChatList':
+        const allMessages = await wrapper.readFromNodes({
+          walletAddress
+        });
+        
+        // Group by chatId and get latest message for each chat
+        const chats = allMessages.reduce((acc, msg) => {
+          if (!acc[msg.chatId]) {
+            acc[msg.chatId] = {
+              id: msg.chatId,
+              title: msg.title,
+              timestamp: msg.timestamp
+            };
+          }
+          return acc;
+        }, {});
+        
+        return res.status(200).json(Object.values(chats));
+
+      case 'getChatMessages':
+        const messages = await wrapper.readFromNodes({
+          walletAddress,
+          chatId
+        });
         const sortedMessages = messages.sort((a, b) => 
           new Date(a.timestamp) - new Date(b.timestamp)
         );
