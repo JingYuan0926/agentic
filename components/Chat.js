@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useWeb3ModalProvider, useWeb3ModalAccount } from '@web3modal/ethers/react';
 import ContractService from '../services/contractService';
 import { BrowserProvider } from 'ethers';
+import nillionService from '../services/nillionService';
 
 function Chat() {
     const [messages, setMessages] = useState([]);
@@ -13,6 +14,8 @@ function Chat() {
     const { walletProvider } = useWeb3ModalProvider();
     const { address, isConnected } = useWeb3ModalAccount();
     const [contractService, setContractService] = useState(null);
+    const [chatHistory, setChatHistory] = useState([]);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
     // Check for wallet on mount
     useEffect(() => {
@@ -53,6 +56,26 @@ function Chat() {
             };
         }
     }, [walletProvider]);
+
+    // Load chat history when address changes
+    useEffect(() => {
+        if (address) {
+            loadChatHistory();
+        }
+    }, [address]);
+
+    const loadChatHistory = async () => {
+        if (!address) return;
+        setIsLoadingHistory(true);
+        try {
+            const history = await nillionService.getChatHistory(address);
+            setChatHistory(history);
+        } catch (error) {
+            console.error('Failed to load chat history:', error);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,6 +118,15 @@ function Chat() {
                 content: `${aiResponse}\n\nTransaction submitted! Hash: ${responseHash}`
             }]);
 
+            // Store chat history
+            await nillionService.storeChatHistory(
+                address,
+                messages,
+                input.substring(0, 30) + "..."
+            );
+
+            // Reload chat history
+            await loadChatHistory();
         } catch (error) {
             console.error('Error:', error);
             setMessages(prev => [...prev, {
