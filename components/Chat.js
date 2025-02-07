@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
-import nillionService from '../services/nillionService';
+import nillionService from '../services/nillionService.js';
 
 function Chat() {
     const [messages, setMessages] = useState([]);
