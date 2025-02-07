@@ -245,24 +245,93 @@ export default function ContractGenerator() {
     };
 
     const handleSendMessage = async () => {
-        if (!input.trim()) return;
-        if (!walletAddress) {
-            setMessages(prev => [...prev, { 
-                role: 'system', 
-                content: 'Please connect your wallet first' 
-            }]);
-            return;
-        }
-
-        setIsLoading(true);
-        const userMessage = { role: 'user', content: input };
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-
         try {
-            await generateAndDeploy(input);
+            setIsLoading(true);
+            
+            // Get contract data from backend
+            const response = await fetch('/api/codey', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: input,
+                    walletAddress 
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.message);
+            }
+
+            // Deploy using connected wallet
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            
+            // Create contract factory
+            const factory = new ethers.ContractFactory(
+                data.abi,
+                data.bytecode,
+                signer
+            );
+
+            setMessages(prev => [...prev, 
+                { role: 'system', content: 'Deploying contract... Please confirm the transaction in your wallet.' }
+            ]);
+
+            // Deploy contract
+            const contract = await factory.deploy();
+            
+            setMessages(prev => [...prev, 
+                { role: 'system', content: 'Waiting for deployment confirmation...' }
+            ]);
+
+            // Wait for deployment to be confirmed
+            await contract.waitForDeployment();
+            const deployedAddress = await contract.getAddress();
+            
+            // Wait for a few blocks to ensure the contract is fully deployed
+            const receipt = await contract.deploymentTransaction().wait(2);
+
+            setMessages(prev => [...prev, 
+                { role: 'assistant', content: `Contract deployed to: ${deployedAddress}` }
+            ]);
+
+            // Wait a few seconds before verification
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Verify contract
+            const verifyResponse = await fetch('/api/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    address: deployedAddress,
+                    contractCode: data.contractCode // Pass the contract code for verification
+                })
+            });
+
+            const verifyData = await verifyResponse.json();
+            
+            if (verifyData.success) {
+                setMessages(prev => [...prev, 
+                    { role: 'assistant', content: `Contract verified! View on FlowScan: ${verifyData.explorerUrl}` }
+                ]);
+            } else {
+                setMessages(prev => [...prev, 
+                    { role: 'system', content: `Verification note: ${verifyData.message}` }
+                ]);
+            }
+
+            setDeployedAddress(deployedAddress);
+
+        } catch (error) {
+            console.error('Error:', error);
+            setMessages(prev => [...prev, 
+                { role: 'system', content: `Error: ${error.message}` }
+            ]);
         } finally {
             setIsLoading(false);
+            setInput('');
         }
     };
 

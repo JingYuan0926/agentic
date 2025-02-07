@@ -3,18 +3,18 @@ const { ethers } = require("hardhat");
 async function main() {
     try {
         // Get the Contract Factory
-        const Counter = await ethers.getContractFactory("Counter");
-        console.log("Deploying Counter...");
+        const Contract = await ethers.getContractFactory("Contract");
+        console.log("Deploying Contract...");
         
         // Deploy the contract
-        const counter = await Counter.deploy();
+        const contract = await Contract.deploy();
         console.log("Waiting for deployment transaction...");
         
         // Wait for deployment to complete
-        await counter.waitForDeployment();
-        const address = await counter.getAddress();
+        await contract.waitForDeployment();
+        const address = await contract.getAddress();
         
-        console.log("Counter deployed to:", address);
+        console.log("Contract deployed to:", address);
         return address;
     } catch (error) {
         console.error("Deployment error:", error);

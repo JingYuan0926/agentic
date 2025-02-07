@@ -1,0 +1,72 @@
+# Smart Contract Function Guidelines
+
+## Transaction Keywords
+deposit, send, transfer, pay, invest, stake, fund
+withdraw, receive, claim, redeem, unstake, cash out
+get, fetch, check, view, read, balance
+
+## Amount Keywords
+amount, quantity, value, sum, total
+number of, count of, units
+
+## Currency Keywords
+flow, FLOW, flows
+ETH, ethers, ethereum, wei, gwei
+BNB, binance coin
+MATIC, polygon
+AVAX, avalanche
+SOL, solana
+USDT, tether
+USDC, usd coin
+DAI
+WETH, wrapped ether
+WBTC, wrapped bitcoin
+BUSD, binance usd
+
+## Parameter Identification Rules
+1. Numbers without units are treated as raw values
+2. Numbers followed by currency units are amounts
+3. Addresses must be in 0x format
+
+## ABI Parameter Identification Guide
+1. uint256: 
+   - Numeric values without decimals
+   - Can be amount if in transaction context
+   - Can be timestamp if time-related
+   - Can be password if in security context
+
+2. address:
+   - Must start with 0x
+   - Must be 42 characters long
+   - Represents wallet or contract addresses
+
+3. bool:
+   - true/false values
+   - yes/no in user input
+   - enable/disable in settings
+
+4. string:
+   - Text input
+   - Names, messages, or descriptions
+   - Can contain spaces and special characters
+
+5. bytes/bytes32:
+   - Hexadecimal data
+   - Hashed values
+   - Raw binary data
+
+6. array types (uint256[], address[]):
+   - Multiple values of same type
+   - Comma-separated in user input
+   - List or sequence of values
+
+7. payable functions:
+   - Amount is taken from transaction value
+   - No explicit amount parameter needed
+   - Value mentioned in user query becomes transaction value
+
+8. view/pure functions:
+   - No state changes
+   - No payment required
+   - Parameters are for querying only
+

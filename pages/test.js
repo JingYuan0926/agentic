@@ -1,39 +1,22 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
-export default function ContractDeployer() {
-  const [contractCode, setContractCode] = useState(`// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-contract Contract {
-    uint256 public count;
-
-    constructor() {
-        count = 0;
-    }
-
-    function getCount() public view returns (uint256) {
-        return count;
-    }
-
-    function increment() public {
-        count += 1;
-    }
-
-    function decrement() public {
-        require(count > 0, "Counter: cannot decrement below zero");
-        count -= 1;
-    }
-}`);
-  const [deploymentStatus, setDeploymentStatus] = useState('');
-  const [deploymentLogs, setDeploymentLogs] = useState([]);
-  const [deployedAddress, setDeployedAddress] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+export default function TestPage() {
+  const [message, setMessage] = useState('');
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [teamResponse, setTeamResponse] = useState(null);
+  const [contractResult, setContractResult] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [teamUpdates, setTeamUpdates] = useState([]);
+  
+  // Wallet states
   const [walletAddress, setWalletAddress] = useState('');
   const [walletBalance, setWalletBalance] = useState('');
   const [signer, setSigner] = useState(null);
   const [provider, setProvider] = useState(null);
+  const [contractABI, setContractABI] = useState(null);
+  const [contractAddress, setContractAddress] = useState(null);
 
   const connectWallet = async () => {
     try {
@@ -41,14 +24,12 @@ contract Contract {
         throw new Error('Please install MetaMask!');
       }
 
-      setDeploymentLogs(prev => [...prev, "Connecting to MetaMask..."]);
+      setTeamUpdates(prev => [...prev, "System: Connecting to MetaMask..."]);
 
-      // Request account access
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const address = accounts[0];
       setWalletAddress(address);
 
-      // Create ethers provider and signer
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       setProvider(provider);
@@ -58,10 +39,9 @@ contract Contract {
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x221' }], // 545 in hex
+          params: [{ chainId: '0x221' }],
         });
       } catch (switchError) {
-        // If Flow network isn't added, add it
         if (switchError.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
@@ -73,192 +53,212 @@ contract Contract {
                 symbol: 'FLOW',
                 decimals: 18
               },
-              rpcUrls: ['https://flow-testnet.g.alchemy.com/v2/6U7t79S89NhHIspqDQ7oKGRWp5ZOfsNj'],
+              rpcUrls: ['https://flow-testnet.g.alchemy.com/v2/your-api-key'],
               blockExplorerUrls: ['https://evm-testnet.flowscan.io']
             }]
           });
         }
       }
 
-      // Get and format balance
       const balance = await provider.getBalance(address);
       const formattedBalance = ethers.formatEther(balance);
       setWalletBalance(formattedBalance);
 
-      setDeploymentLogs(prev => [
+      setTeamUpdates(prev => [
         ...prev,
-        `Connected to MetaMask: ${address}`,
-        `Balance: ${formattedBalance} FLOW`
+        `System: Connected to MetaMask: ${address}`,
+        `System: Balance: ${formattedBalance} FLOW`
       ]);
     } catch (error) {
       console.error('Connection error:', error);
-      setError(error.message);
-      setDeploymentLogs(prev => [...prev, `Error: ${error.message}`]);
+      setTeamUpdates(prev => [...prev, `System Error: ${error.message}`]);
     }
   };
 
-  const handleDeploy = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!signer) {
+    if (!walletAddress) {
       setError('Please connect your wallet first');
       return;
     }
 
-    setIsLoading(true);
     setError(null);
-    setDeploymentLogs([`Starting deployment process...`]);
+    setResult(null);
+    setTeamResponse(null);
+    setContractResult(null);
+    setLogs([]);
+    setTeamUpdates([]);
 
     try {
-      // Compile contract
-      setDeploymentLogs(prev => [...prev, "Compiling contract..."]);
-      const compileResponse = await fetch('/api/compile', {
+      // First, get intent from Finn
+      const finnResponse = await fetch('/api/finn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contractCode }),
+        body: JSON.stringify({ message }),
       });
 
-      const compileData = await compileResponse.json();
-      
-      if (!compileData.success) {
-        throw new Error(compileData.error || 'Compilation failed. Check the contract code.');
+      const finnData = await finnResponse.json();
+      if (!finnResponse.ok) {
+        setError(finnData.teamResponse);
+        return;
       }
 
-      if (!compileData.abi || !compileData.bytecode) {
-        throw new Error('Compilation succeeded but missing ABI or bytecode. Please try again.');
-      }
+      setResult(finnData.intent);
+      setTeamUpdates(prev => [...prev, finnData.teamResponse]);
 
-      setDeploymentLogs(prev => [...prev, "Contract compiled successfully"]);
-
-      // Deploy contract using MetaMask
-      setDeploymentLogs(prev => [...prev, "Deploying contract..."]);
-      
-      // Create contract factory with explicit error handling
-      let factory;
-      try {
-        factory = new ethers.ContractFactory(compileData.abi, compileData.bytecode, signer);
-      } catch (error) {
-        throw new Error(`Failed to create contract factory: ${error.message}`);
-      }
-      
-      // Deploy with specific gas settings and error handling
-      let contract;
-      try {
-        contract = await factory.deploy({
-          gasLimit: 3000000
+      // Handle different intents
+      if (finnData.intent === 'generate') {
+        // Call Codey for contract generation
+        const codeyResponse = await fetch('/api/codey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: message }),
         });
-      } catch (error) {
-        throw new Error(`Failed to deploy contract: ${error.message}`);
+
+        const codeyData = await codeyResponse.json();
+        if (!codeyResponse.ok) throw new Error('Contract generation failed');
+
+        setContractResult(codeyData);
+        setLogs(prev => [...prev, ...(codeyData.logs || [])]);
+        setTeamUpdates(prev => [...prev, ...(codeyData.teamUpdates || [])]);
+        
+        // Store contract details if deployed
+        if (codeyData.success && codeyData.abi) {
+          setContractABI(codeyData.abi);
+          setContractAddress(codeyData.deployedAddress);
+        }
+
+      } else if (finnData.intent === 'interact') {
+        // Call Vee to identify function
+        const veeResponse = await fetch('/api/vee', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [],
+            contractABI,
+            userQuery: message
+          }),
+        });
+
+        const veeData = await veeResponse.json();
+        setLogs(prev => [...prev, ...(veeData.logs || [])]);
+        setTeamUpdates(prev => [...prev, ...(veeData.teamUpdates || [])]);
+
+        if (veeData.success) {
+          // Call Dex to extract parameters
+          const dexResponse = await fetch('/api/dex', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [],
+              functionInfo: veeData.function,
+              userQuery: message
+            }),
+          });
+
+          const dexData = await dexResponse.json();
+          setLogs(prev => [...prev, ...(dexData.logs || [])]);
+          setTeamUpdates(prev => [...prev, ...(dexData.teamUpdates || [])]);
+
+          if (dexData.success) {
+            // Execute the contract function
+            const contract = new ethers.Contract(
+              contractAddress,
+              contractABI,
+              signer
+            );
+
+            const tx = await contract[veeData.function.name](
+              ...dexData.params
+            );
+            
+            setTeamUpdates(prev => [...prev, 
+              `System: Transaction sent! Hash: ${tx.hash}`
+            ]);
+          }
+        }
       }
-      
-      setDeploymentLogs(prev => [...prev, "Waiting for deployment confirmation..."]);
-      await contract.waitForDeployment();
-      
-      const deployedAddress = await contract.getAddress();
-      setDeployedAddress(deployedAddress);
-      
-      setDeploymentLogs(prev => [
-        ...prev,
-        `Contract deployed successfully!`,
-        `Address: ${deployedAddress}`
-      ]);
-
-      // Verify contract
-      setDeploymentLogs(prev => [...prev, "Verifying contract..."]);
-      const verifyResponse = await fetch('/api/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address: deployedAddress,
-          contractCode
-        }),
-      });
-
-      const verifyData = await verifyResponse.json();
-      
-      if (verifyData.success) {
-        setDeploymentLogs(prev => [...prev, "Contract verified successfully!"]);
-      } else {
-        setDeploymentLogs(prev => [...prev, `Verification note: ${verifyData.message}`]);
-      }
-
-      setDeploymentStatus('Deployment and verification complete!');
-    } catch (error) {
-      console.error('Deployment error:', error);
-      setError(error.message);
-      setDeploymentLogs(prev => [...prev, `Error: ${error.message}`]);
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      setError('An error occurred during processing');
+      console.error(err);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Smart Contract Deployer</h1>
+    <div className="min-h-screen p-8">
+      <h1 className="text-2xl font-bold mb-6">AI Team Test Interface</h1>
       
-      <form onSubmit={handleDeploy} className="space-y-6">
+      {/* Wallet Connection */}
+      <div className="mb-6">
+        <button
+          onClick={connectWallet}
+          className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+        >
+          {walletAddress 
+            ? `Connected: ${walletBalance} FLOW`
+            : 'Connect Wallet'
+          }
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
         <div>
-          <label className="block text-sm font-medium mb-2">
-            Contract Source Code
-          </label>
           <textarea
-            value={contractCode}
-            onChange={(e) => setContractCode(e.target.value)}
-            className="w-full h-96 p-4 border rounded font-mono text-sm"
-            placeholder="// Paste your Solidity contract code here..."
-            required
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Enter your message here..."
+            className="w-full p-2 border rounded-md min-h-[100px]"
           />
         </div>
-
-        <div className="flex gap-4 mb-4">
-          <button
-            type="button"
-            onClick={connectWallet}
-            className="bg-green-500 text-white p-3 rounded hover:bg-green-600"
-          >
-            {walletAddress ? `Connected: ${walletBalance} FLOW` : 'Connect Wallet'}
-          </button>
-        </div>
-
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            disabled={isLoading || !walletAddress}
-            className="flex-1 bg-blue-500 text-white p-3 rounded hover:bg-blue-600 disabled:bg-blue-300"
-          >
-            {isLoading ? 'Processing...' : 'Deploy & Verify Contract'}
-          </button>
-        </div>
+        
+        <button
+          type="submit"
+          disabled={!walletAddress}
+          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400"
+        >
+          Submit Request
+        </button>
       </form>
 
-      {/* Deployment Logs */}
-      {deploymentLogs.length > 0 && (
-        <div className="mt-4 p-4 bg-gray-100 rounded">
-          <h3 className="font-semibold mb-2">Deployment Logs:</h3>
-          <div className="space-y-1 font-mono text-sm">
-            {deploymentLogs.map((log, index) => (
-              <div key={index} className="text-gray-700">{log}</div>
+      {/* Team Communication Section */}
+      {teamUpdates.length > 0 && (
+        <div className="mt-6 p-4 bg-blue-50 rounded-md">
+          <h2 className="font-semibold mb-2">Team Communication:</h2>
+          <div className="space-y-2">
+            {teamUpdates.map((update, index) => (
+              <p key={`update-${index}`} className="text-blue-800">{update}</p>
             ))}
           </div>
         </div>
       )}
 
-      {/* Status Display */}
-      {deploymentStatus && (
-        <div className="mt-4 p-4 bg-gray-100 rounded">
-          <h3 className="font-semibold">Final Status:</h3>
-          <p>{deploymentStatus}</p>
-          {deployedAddress && (
-            <div className="mt-2">
-              <p className="font-semibold">Deployed Address:</p>
-              <code className="block p-2 bg-gray-200 rounded">{deployedAddress}</code>
-              <a 
-                href={`https://evm-testnet.flowscan.io/address/${deployedAddress}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 underline mt-2 inline-block"
-              >
-                View on Flow Explorer
-              </a>
+      {/* Intent Result */}
+      {result && (
+        <div className="mt-6 p-4 bg-green-50 rounded-md">
+          <h2 className="font-semibold mb-2">Detected Intent:</h2>
+          <p className="text-green-700">{result}</p>
+        </div>
+      )}
+
+      {/* Contract Generation Result */}
+      {contractResult && (
+        <div className="mt-6 space-y-4">
+          <div className="p-4 bg-gray-50 rounded-md">
+            <h2 className="font-semibold mb-2">Generated Contract:</h2>
+            <pre className="bg-gray-800 text-white p-4 rounded-md overflow-x-auto">
+              <code>{contractResult.contractCode}</code>
+            </pre>
+          </div>
+
+          {/* Logs Section */}
+          {logs.length > 0 && (
+            <div className="p-4 bg-yellow-50 rounded-md">
+              <h2 className="font-semibold mb-2">Process Updates:</h2>
+              <div className="space-y-2">
+                {logs.map((log, index) => (
+                  <p key={index} className="text-gray-700">{log}</p>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -266,25 +266,19 @@ contract Contract {
 
       {/* Error Display */}
       {error && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded">
-          <h3 className="font-semibold">Error:</h3>
-          <p>{error}</p>
+        <div className="mt-6 p-4 bg-red-50 rounded-md">
+          <p className="text-red-700">{error}</p>
         </div>
       )}
 
-      {/* Instructions */}
-      <div className="mt-8 p-4 bg-gray-50 rounded">
-        <h3 className="font-semibold mb-2">Instructions:</h3>
-        <ol className="list-decimal list-inside space-y-2">
-          <li>Connect your wallet using the green button above</li>
-          <li>Paste your Solidity contract code in the text area above</li>
-          <li>Click "Deploy & Verify Contract" to start the process</li>
-          <li>Wait for the deployment and verification to complete</li>
-          <li>Once successful, you'll see the deployed contract address and a link to view it on the explorer</li>
-        </ol>
-        <p className="mt-4 text-sm text-gray-600">
-          Note: Make sure your contract is compatible with Solidity version 0.8.20 and follows proper syntax.
-        </p>
+      {/* Updated Example Messages */}
+      <div className="mt-8 text-sm text-gray-600">
+        <p>Try these example messages:</p>
+        <ul className="list-disc ml-5 mt-2">
+          <li>"Create an NFT contract with mint function"</li>
+          <li>"Mint a new NFT to address 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"</li>
+          <li>"What's the total supply of the token?"</li>
+        </ul>
       </div>
     </div>
   );
