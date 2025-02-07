@@ -13,96 +13,68 @@ export default async function handler(req, res) {
     try {
         const { messages, contractABI, contractAddress, context } = req.body;
 
-        // Prepare detailed contract context for the AI
-        let contractContext = '';
-        if (contractABI) {
-            const functions = contractABI.filter(item => item.type === 'function').map(func => ({
-                name: func.name,
-                inputs: func.inputs,
-                outputs: func.outputs,
-                stateMutability: func.stateMutability
-            }));
-
-            contractContext = `
-                Contract Address: ${contractAddress}
-                Available Functions:
-                ${functions.map(func => `
-                    - ${func.name}:
-                      Inputs: ${func.inputs.map(input => `${input.name} (${input.type})`).join(', ')}
-                      Stateful: ${func.stateMutability}
-                      Returns: ${func.outputs?.map(output => output.type).join(', ') || 'void'}
-                `).join('\n')}
-                
-                Previous context: ${context?.lastInteraction ? `Last interaction was with function ${JSON.parse(context.lastInteraction).function.name}` : 'No previous interaction'}
-            `;
-        }
-
+        // Use the same enhanced system message as chat.js
         const systemMessage = {
             role: 'system',
-            content: `You are an AI assistant that helps users interact with smart contracts. ${contractContext}
+            content: `You are an AI assistant that helps users interact with smart contracts. 
+            ${await buildContractContext(contractABI, contractAddress, context)}
 
             Your tasks:
-            1. Understand user intent in natural language
-            2. Map user requests to appropriate contract functions
-            3. Extract parameter values from user messages
-            4. Handle value transfers for payable functions
-            5. Provide clear feedback and ask for missing information
-            6. If you can detect the user is trying to call multiple functions in one message, please identify and execute them correctly.
+            1. Analyze user intent and map to contract functions
+            2. For each function call:
+               - Check ABI for required parameters
+               - If parameters are missing, list them specifically
+               - For payable functions, ensure value is specified
+               - Validate parameter types match ABI requirements
+            3. DO NOT proceed with function calls if any parameters are missing
+            4. For transfer functions:
+               - Always require amount parameter
+               - Validate amount format
+               - Check if recipient address is needed
+            5. Provide clear feedback about:
+               - Which parameters are missing
+               - Expected parameter types
+               - Example of correct usage
 
-            Examples:
-            - "deposit 50 flows" → Call payable function with value 50
-            - "add one" → Map to increment() function
-            - "what's the current count" → Map to getCount() function
-
-            If parameters are missing or unclear, ask the user specifically for what's needed.
-            If multiple functions could match the intent, explain the options and ask for clarification.
-            Always provide user-friendly responses explaining what will be done or what information is needed.`
+            Remember: Never attempt to execute a function without all required parameters.`
         };
 
+        // Use the same function definition as chat.js
         const response = await openai.chat.completions.create({
             model: "meta-llama/Llama-3.3-70B-Instruct",
             messages: [systemMessage, ...messages],
             functions: [
                 {
                     name: "interactWithContract",
-                    description: "Interact with the smart contract based on user intent",
                     parameters: {
                         type: "object",
                         properties: {
-                            functionCall: {
-                                type: "object",
-                                properties: {
-                                    name: {
-                                        type: "string",
-                                        description: "Name of the contract function to call"
-                                    },
-                                    params: {
-                                        type: "array",
-                                        description: "Parameters for the function call",
-                                        items: {
-                                            type: "string"
-                                        }
-                                    },
-                                    value: {
-                                        type: "string",
-                                        description: "Amount of native tokens to send with the transaction (for payable functions)"
-                                    }
-                                },
-                                required: ["name"]
-                            },
-                            explanation: {
-                                type: "string",
-                                description: "User-friendly explanation of what will be done"
-                            },
-                            missingParams: {
+                            functionCalls: {
                                 type: "array",
-                                description: "List of missing parameters that need to be requested from user",
                                 items: {
-                                    type: "string"
+                                    type: "object",
+                                    properties: {
+                                        name: { type: "string" },
+                                        params: { type: "array", items: { type: "string" } },
+                                        value: { type: "string" },
+                                        missingParams: {
+                                            type: "array",
+                                            items: {
+                                                type: "object",
+                                                properties: {
+                                                    name: { type: "string" },
+                                                    type: { type: "string" }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
+                            },
+                            explanation: { type: "string" },
+                            requiresMoreInfo: { type: "boolean" },
+                            missingParamsDescription: { type: "string" }
                         },
-                        required: ["explanation"]
+                        required: ["explanation", "requiresMoreInfo"]
                     }
                 }
             ]

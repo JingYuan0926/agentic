@@ -292,32 +292,52 @@ export default function SmartContractChat() {
                 };
             }
 
-            console.log('Calling function:', functionDetails); // Debug log
             const contract = new ethers.Contract(contractAddress, contractABI, signer);
-            const { name, params = [] } = functionDetails;
+            const { name, params = [], value = null } = functionDetails;
 
-            // Verify function exists in ABI
-            if (!contract[name]) {
+            // Find the function in ABI
+            const abiFunction = contractABI.find(f => 
+                f.type === 'function' && f.name === name
+            );
+
+            if (!abiFunction) {
                 return {
                     success: false,
                     message: `Function ${name} not found in contract ABI.`
                 };
             }
 
-            // Add retry logic for failed transactions
+            // Convert parameters based on their ABI types
+            const convertedParams = params.map((param, index) => {
+                const input = abiFunction.inputs[index];
+                // Only convert numeric values that are actually numbers
+                if ((input.type === 'uint256' || input.type === 'uint') && !isNaN(param)) {
+                    try {
+                        return ethers.parseUnits(param.toString(), 'ether');
+                    } catch (e) {
+                        return param;
+                    }
+                }
+                return param;
+            });
+
             let attempts = 0;
             const maxAttempts = 3;
 
             while (attempts < maxAttempts) {
                 try {
-                    const result = value 
-                        ? await contract[name](...(params || []), { value: ethers.parseEther(value.toString()) })
-                        : await contract[name](...(params || []));
+                    const txOptions = {};
+                    // Only add value if it's a valid number
+                    if (value && !isNaN(value)) {
+                        txOptions.value = ethers.parseEther(value.toString());
+                    }
+
+                    const result = Object.keys(txOptions).length > 0
+                        ? await contract[name](...convertedParams, txOptions)
+                        : await contract[name](...convertedParams);
 
                     if (result.wait) {
                         await result.wait();
-                        // Store successful interaction in localStorage
-                        storeInteraction(name, params, value);
                         return {
                             success: true,
                             message: `Transaction completed successfully! ${value ? `Sent ${value} FLOW.` : ''}`
@@ -330,7 +350,6 @@ export default function SmartContractChat() {
                     };
                 } catch (error) {
                     attempts++;
-                    console.error(`Attempt ${attempts} failed:`, error); // Debug log
                     if (attempts === maxAttempts || shouldNotRetry(error)) {
                         return handleContractError(error);
                     }
@@ -338,7 +357,7 @@ export default function SmartContractChat() {
                 }
             }
         } catch (error) {
-            console.error('Contract call error:', error); // Debug log
+            console.error('Contract call error:', error);
             return handleContractError(error);
         }
     };

@@ -11,51 +11,56 @@ export default async function handler(req, res) {
 
     try {
         const { messages, contractABI, contractAddress, context } = req.body;
-
-        // Prepare detailed contract context for the AI
-        let contractContext = '';
-        if (contractABI) {
-            const functions = contractABI.filter(item => item.type === 'function').map(func => ({
-                name: func.name,
-                inputs: func.inputs,
-                outputs: func.outputs,
-                stateMutability: func.stateMutability
-            }));
-
-            contractContext = `
-                Contract Address: ${contractAddress}
-                Available Functions:
-                ${functions.map(func => `
-                    - ${func.name}:
-                      Inputs: ${func.inputs.map(input => `${input.name} (${input.type})`).join(', ')}
-                      Stateful: ${func.stateMutability}
-                      Returns: ${func.outputs?.map(output => output.type).join(', ') || 'void'}
-                `).join('\n')}
-                
-                Previous context: ${context?.lastInteraction ? `Last interaction was with function ${JSON.parse(context.lastInteraction).function.name}` : 'No previous interaction'}
-            `;
-        }
+        const userMessage = messages[messages.length - 1].content;
 
         const systemMessage = {
             role: 'system',
-            content: `You are an AI assistant that helps users interact with smart contracts. ${contractContext}
+            content: `You are an AI assistant that helps users interact with smart contracts.
+            ${await buildContractContext(contractABI, contractAddress, context)}
 
-            Your tasks:
-            1. Understand user intent in natural language
-            2. Map user requests to appropriate contract functions
-            3. Extract parameter values from user messages
-            4. Handle value transfers for payable functions
-            5. Provide clear feedback and ask for missing information
-            6. If you can detect the user is trying to call multiple functions in one message, please identify and execute them correctly.
+            STRICT INTERACTION RULES:
+            1. Function Identification:
+               - Analyze user message to identify intended function from ABI
+               - Match using natural language understanding
+               - If no match found, ask user to rephrase
+            
+            2. Parameter Collection:
+               - Check ABI for required parameters
+               - Extract parameters from user message if present
+               - For ANY missing parameter, do not proceed with execution
+               - Instead, ask user specifically for each missing parameter
+               - Only return functionCall when ALL parameters are properly provided
+            
+            3. Multiple Function Detection:
+               - Check if user message contains multiple function calls
+               - Handle each function call separately
+               - Track parameters for each call independently
+            
+            4. Response Format:
+               When parameters are missing:
+               {
+                 "requiresMoreInfo": true,
+                 "explanation": "Please provide [specific parameter]",
+                 "functionName": "[identified function]",
+                 "missingParams": ["param1", "param2"]
+               }
+               
+               When ready to execute:
+               {
+                 "requiresMoreInfo": false,
+                 "functionCalls": [{
+                   "name": "[function name]",
+                   "params": ["actual", "values"],
+                   "value": "numeric_amount_if_needed"
+                 }]
+               }
 
-            Examples:
-            - "deposit 50 flows" → Call payable function with value 50
-            - "add one" → Map to increment() function
-            - "what's the current count" → Map to getCount() function
+            Current ABI:
+            ${JSON.stringify(contractABI, null, 2)}
 
-            If parameters are missing or unclear, ask the user specifically for what's needed.
-            If multiple functions could match the intent, explain the options and ask for clarification.
-            Always provide user-friendly responses explaining what will be done or what information is needed.`
+            Previous Context:
+            ${context?.lastInteraction ? JSON.stringify(context.lastInteraction) : 'No previous interaction'}
+            `
         };
 
         const response = await openai.chat.completions.create({
@@ -64,81 +69,84 @@ export default async function handler(req, res) {
             functions: [
                 {
                     name: "interactWithContract",
-                    description: "Interact with the smart contract based on user intent",
                     parameters: {
                         type: "object",
                         properties: {
-                            functionCall: {
-                                type: "object",
-                                properties: {
-                                    name: {
-                                        type: "string",
-                                        description: "Name of the contract function to call"
-                                    },
-                                    params: {
-                                        type: "array",
-                                        description: "Parameters for the function call",
-                                        items: {
-                                            type: "string"
-                                        }
-                                    },
-                                    value: {
-                                        type: "string",
-                                        description: "Amount of native tokens to send with the transaction (for payable functions)"
-                                    }
-                                },
-                                required: ["name"]
-                            },
-                            explanation: {
-                                type: "string",
-                                description: "User-friendly explanation of what will be done"
-                            },
-                            missingParams: {
+                            functionCalls: {
                                 type: "array",
-                                description: "List of missing parameters that need to be requested from user",
                                 items: {
-                                    type: "string"
+                                    type: "object",
+                                    properties: {
+                                        name: { type: "string" },
+                                        params: { type: "array", items: { type: "string" } },
+                                        value: { type: "string" }
+                                    }
                                 }
+                            },
+                            requiresMoreInfo: { type: "boolean" },
+                            explanation: { type: "string" },
+                            missingParams: { 
+                                type: "array", 
+                                items: { type: "string" } 
                             }
                         },
-                        required: ["explanation"]
+                        required: ["requiresMoreInfo"]
                     }
-
                 }
-            ]
+            ],
+            function_call: { name: "interactWithContract" }
         });
 
         const assistantResponse = response.choices[0].message;
+        const functionData = assistantResponse.function_call 
+            ? JSON.parse(assistantResponse.function_call.arguments)
+            : null;
 
-        // Check for contract address in user message
-        const addressMatch = messages[messages.length - 1].content.match(/0x[a-fA-F0-9]{40}/);
-        
-        let responseData = {
-            content: assistantResponse.content
+        // Format response based on whether more info is needed
+        const responseData = {
+            content: functionData.requiresMoreInfo 
+                ? functionData.explanation 
+                : "Ready to execute the function(s).",
+            requiresMoreInfo: functionData.requiresMoreInfo,
+            functionCalls: !functionData.requiresMoreInfo ? functionData.functionCalls : null,
+            missingParams: functionData.requiresMoreInfo ? functionData.missingParams : null
         };
-
-        if (addressMatch && !contractABI) {
-            responseData.contractAddress = addressMatch[0];
-        }
-
-        if (assistantResponse.function_call) {
-            const functionData = JSON.parse(assistantResponse.function_call.arguments);
-            
-            responseData = {
-                ...responseData,
-                functionCall: functionData.functionCall,
-                explanation: functionData.explanation,
-                missingParams: functionData.missingParams,
-                alternativeSuggestion: functionData.alternativeSuggestion
-            };
-        }
 
         res.status(200).json(responseData);
 
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ 
-            content: "I'm having trouble processing that request. Could you please try again or rephrase it?" 
+            content: "I'm having trouble processing that request. Could you please try again?" 
         });
     }
 }
+
+// Helper function to build detailed contract context
+const buildContractContext = async (abi, address, context) => {
+    if (!abi) return '';
+    
+    const functions = abi.filter(item => item.type === 'function')
+        .map(func => ({
+            name: func.name,
+            inputs: func.inputs,
+            outputs: func.outputs,
+            stateMutability: func.stateMutability
+        }));
+
+    return `
+        Contract Context:
+        Address: ${address}
+        Available Functions:
+        ${functions.map(func => `
+            - ${func.name}:
+              Inputs: ${func.inputs.map(input => `${input.name} (${input.type})`).join(', ')}
+              Stateful: ${func.stateMutability}
+              Returns: ${func.outputs?.map(output => output.type).join(', ') || 'void'}
+        `).join('\n')}
+        
+        Previous Context: ${context?.lastInteraction ? 
+            `Last interaction: ${JSON.parse(context.lastInteraction).function.name}` : 
+            'No previous interaction'}
+    `;
+};
