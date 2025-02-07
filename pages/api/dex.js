@@ -135,7 +135,7 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
                     content: `Extract parameters for ${functionInfo.name} function.
                     Function type: ${functionInfo.stateMutability}
                     Return ONLY the numeric amount in JSON format.
-                    For example, if user says "deposit 150 flow", return: {"amount": "150"}`
+                    For example: {"amount": "30"}`
                 },
                 {
                     role: "user",
@@ -148,7 +148,7 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
         const extractedValues = JSON.parse(analysis.choices[0].message.content);
         
         // Add parameters based on function type
-        if (functionInfo.stateMutability === 'payable' && extractedValues.amount) {
+        if (functionInfo.stateMutability === 'payable' || functionInfo.name === 'withdraw') {
             functionCall.addParameter('uint256', 'amount', extractedValues.amount);
         }
 
@@ -159,7 +159,7 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
             success: true,
             functionCall: functionCall.toJSON(),
             params: {
-                amount: functionCall.params.get('amount')?.value
+                amount: extractedValues.amount
             }
         };
     } catch (error) {
@@ -174,30 +174,26 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
 // Update the execution function
 async function extractAndExecuteFunction(userQuery, functionInfo) {
     try {
+        console.log('Processing function:', {
+            name: functionInfo.name,
+            userQuery,
+            stateMutability: functionInfo.stateMutability
+        });
+
         const paramData = await extractAndValidateParameters(userQuery, functionInfo);
         
         if (!paramData.success) {
             return {
                 success: false,
-                message: paramData.message || "Failed to extract parameters"
+                message: paramData.message
             };
         }
-
-        // Generate team update about the extracted parameters
-        const teamUpdate = await generateTeamUpdate(
-            "parameters_extracted",
-            {
-                function: functionInfo.name,
-                params: paramData.params
-            }
-        );
 
         return {
             success: true,
             functionCall: paramData.functionCall,
             params: paramData.params,
-            message: `Ready to execute ${functionInfo.name} with amount: ${paramData.params.amount} FLOW`,
-            teamUpdate
+            message: `Ready to execute ${functionInfo.name} with amount: ${paramData.params.amount} FLOW`
         };
     } catch (error) {
         console.error('Function execution error:', error);
