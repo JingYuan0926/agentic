@@ -13,6 +13,8 @@ export default function SmartContractChat() {
     const [walletAddress, setWalletAddress] = useState('');
     const [walletBalance, setWalletBalance] = useState('');
     const [deployedAddress, setDeployedAddress] = useState(null);
+    const [deploymentLogs, setDeploymentLogs] = useState([]);
+    const [aiModel, setAiModel] = useState('openai'); // 'openai' or 'hyperbolic'
 
     // Clear localStorage and reset state on mount
     useEffect(() => {
@@ -91,17 +93,23 @@ export default function SmartContractChat() {
         }
     };
 
-    const generateAndDeploy = async (requirement) => {
+    const generateAndDeploy = async (requirement, endpoint) => {
         try {
             // Generate contract
-            const generateResponse = await fetch('/api/generate-contract', {
+            const generateResponse = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt: requirement }),
             });
 
             const generateData = await generateResponse.json();
-            if (!generateData.success) throw new Error('Failed to generate contract');
+            if (!generateData.success) {
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: "I couldn't generate the contract. Could you please rephrase your requirements?" 
+                }]);
+                return false;
+            }
             
             setContractCode(generateData.contractCode);
             setMessages(prev => [...prev, { 
@@ -152,56 +160,96 @@ export default function SmartContractChat() {
                 content: 'Contract compiled successfully. Deploying...' 
             }]);
 
-            // Deploy contract
-            const factory = new ethers.ContractFactory(
-                compileData.abi, 
-                compileData.bytecode, 
-                signer
-            );
+            // Enhanced deployment with better error handling
+            try {
+                const factory = new ethers.ContractFactory(
+                    compileData.abi, 
+                    compileData.bytecode, 
+                    signer
+                );
 
-            const contract = await factory.deploy({
-                gasLimit: 3000000
-            });
+                const contract = await factory.deploy({
+                    gasLimit: 3000000
+                });
 
-            setMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: 'Contract deployment in progress...' 
-            }]);
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: 'Contract deployment initiated. Please confirm in MetaMask...' 
+                }]);
 
-            await contract.waitForDeployment();
-            const deployedAddress = await contract.getAddress();
-            setDeployedAddress(deployedAddress);
+                await contract.waitForDeployment();
+                const deployedAddress = await contract.getAddress();
 
-            // Set contract ABI and address for interaction
-            setContractABI(compileData.abi);
-            setContractAddress(deployedAddress);
-
-            // Verify contract
-            const verifyResponse = await fetch('/api/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+                // Store contract details in localStorage for persistence
+                localStorage.setItem('contractDetails', JSON.stringify({
                     address: deployedAddress,
-                    contractCode: contractCode
-                }),
-            });
+                    abi: compileData.abi,
+                    code: contractCode,
+                    timestamp: Date.now()
+                }));
 
-            const verifyData = await verifyResponse.json();
+                // Set contract ABI and address for interaction
+                setContractABI(compileData.abi);
+                setContractAddress(deployedAddress);
 
-            setMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: `Contract deployed and verified successfully!\nAddress: ${deployedAddress}\nView on Flow Explorer: https://evm-testnet.flowscan.io/address/${deployedAddress}` 
-            }]);
+                // Verify contract
+                const verifyResponse = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        address: deployedAddress,
+                        contractCode: contractCode
+                    }),
+                });
 
-            return true;
+                const verifyData = await verifyResponse.json();
+
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: `Contract deployed and verified successfully!\nAddress: ${deployedAddress}\nView on Flow Explorer: https://evm-testnet.flowscan.io/address/${deployedAddress}` 
+                }]);
+
+                // Store contract context for future interactions
+                const contractContext = await getContractContext(compileData.abi);
+                localStorage.setItem('contractContext', JSON.stringify(contractContext));
+
+                return true;
+            } catch (deployError) {
+                handleDeploymentError(deployError);
+                return false;
+            }
         } catch (error) {
             console.error('Error:', error);
-            setMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: `Error: ${error.message}` 
-            }]);
+            handleGeneralError(error);
             return false;
         }
+    };
+
+    // New helper functions for better error handling
+    const handleDeploymentError = (error) => {
+        if (error.message.includes('insufficient funds')) {
+            setMessages(prev => [...prev, { 
+                role: 'assistant', 
+                content: "You don't have enough FLOW tokens for deployment. Please get some FLOW and try again." 
+            }]);
+        } else if (error.message.includes('user rejected')) {
+            setMessages(prev => [...prev, { 
+                role: 'assistant', 
+                content: "You rejected the transaction. Would you like to try deploying again?" 
+            }]);
+        } else {
+            setMessages(prev => [...prev, { 
+                role: 'assistant', 
+                content: `Deployment failed: ${error.message}. Would you like to try again?` 
+            }]);
+        }
+    };
+
+    const handleGeneralError = (error) => {
+        setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: `An error occurred: ${error.message}. Please try again or modify your request.` 
+        }]);
     };
 
     const getABI = async (address) => {
@@ -218,7 +266,6 @@ export default function SmartContractChat() {
 
     const getContractContext = async (abi) => {
         try {
-            // Store contract interface details in localStorage
             const functions = abi.filter(item => item.type === 'function').map(func => ({
                 name: func.name,
                 inputs: func.inputs,
@@ -226,13 +273,10 @@ export default function SmartContractChat() {
                 stateMutability: func.stateMutability
             }));
 
-            const contractContext = {
+            return {
                 functions,
                 lastInteraction: Date.now()
             };
-
-            localStorage.setItem('contractContext', JSON.stringify(contractContext));
-            return contractContext;
         } catch (error) {
             console.error('Error parsing contract context:', error);
             return null;
@@ -244,152 +288,226 @@ export default function SmartContractChat() {
             if (!signer || !contractAddress || !contractABI) {
                 return {
                     success: false,
-                    message: "I notice the contract isn't connected yet. Could you please provide the contract address you'd like to interact with?"
+                    message: "Contract not properly initialized. Please connect to a contract first."
                 };
             }
 
+            console.log('Calling function:', functionDetails); // Debug log
             const contract = new ethers.Contract(contractAddress, contractABI, signer);
-            const { name, params, value } = functionDetails;
+            const { name, params = [] } = functionDetails;
 
-            let result;
-            try {
-                if (value) {
-                    // Handle payable functions
-                    result = await contract[name]({
-                        value: ethers.parseEther(value.toString())
-                    });
-                } else {
-                    // Handle regular functions
-                    result = await contract[name](...(params || []));
-                }
-
-                if (result.wait) {
-                    await result.wait();
-                    return {
-                        success: true,
-                        message: `Transaction completed successfully! ${value ? `Deposited ${value} FLOW.` : ''}`
-                    };
-                }
-
-                return {
-                    success: true,
-                    message: `Current value: ${result.toString()}`
-                };
-            } catch (error) {
-                // Handle specific error cases
-                if (error.message.includes('insufficient funds')) {
-                    return {
-                        success: false,
-                        message: "I noticed you don't have enough FLOW in your wallet for this transaction. Please make sure you have enough funds and try again."
-                    };
-                }
-                if (error.message.includes('user rejected')) {
-                    return {
-                        success: false,
-                        message: "I see you declined the transaction. No worries! Let me know if you'd like to try again."
-                    };
-                }
+            // Verify function exists in ABI
+            if (!contract[name]) {
                 return {
                     success: false,
-                    message: "I encountered an issue while trying to execute that action. Could you please try again or rephrase your request?"
+                    message: `Function ${name} not found in contract ABI.`
                 };
             }
+
+            // Add retry logic for failed transactions
+            let attempts = 0;
+            const maxAttempts = 3;
+
+            while (attempts < maxAttempts) {
+                try {
+                    const result = value 
+                        ? await contract[name](...(params || []), { value: ethers.parseEther(value.toString()) })
+                        : await contract[name](...(params || []));
+
+                    if (result.wait) {
+                        await result.wait();
+                        // Store successful interaction in localStorage
+                        storeInteraction(name, params, value);
+                        return {
+                            success: true,
+                            message: `Transaction completed successfully! ${value ? `Sent ${value} FLOW.` : ''}`
+                        };
+                    }
+
+                    return {
+                        success: true,
+                        message: `Result: ${result.toString()}`
+                    };
+                } catch (error) {
+                    attempts++;
+                    console.error(`Attempt ${attempts} failed:`, error); // Debug log
+                    if (attempts === maxAttempts || shouldNotRetry(error)) {
+                        return handleContractError(error);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
         } catch (error) {
-            return {
-                success: false,
-                message: "I'm having trouble understanding how to interact with this contract. Could you please verify the contract address and try again?"
-            };
+            console.error('Contract call error:', error); // Debug log
+            return handleContractError(error);
         }
     };
 
-    const handleSendMessage = async () => {
-        if (!input.trim()) return;
-        if (!walletAddress) {
-            setMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: "Please connect your wallet first" 
-            }]);
-            return;
-        }
+    // New helper functions for contract interaction
+    const shouldNotRetry = (error) => {
+        return error.message.includes('user rejected') || 
+               error.message.includes('insufficient funds') ||
+               error.message.includes('invalid parameters');
+    };
 
+    const handleContractError = (error) => {
+        if (error.message.includes('insufficient funds')) {
+            return {
+                success: false,
+                message: "Insufficient FLOW in wallet for this transaction."
+            };
+        }
+        if (error.message.includes('user rejected')) {
+            return {
+                success: false,
+                message: "Transaction was rejected. Would you like to try again?"
+            };
+        }
+        return {
+            success: false,
+            message: `Error: ${error.message}`
+        };
+    };
+
+    const storeInteraction = (functionName, params, value) => {
+        const interactions = JSON.parse(localStorage.getItem('contractInteractions') || '[]');
+        interactions.push({
+            functionName,
+            params,
+            value,
+            timestamp: Date.now()
+        });
+        localStorage.setItem('contractInteractions', JSON.stringify(interactions));
+    };
+
+    // Add this new function to analyze user intent
+    const analyzeUserIntent = async (userMessage) => {
+        try {
+            const response = await fetch('/api/analyze-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: userMessage,
+                    hasContract: !!contractABI,
+                    contractAddress: contractAddress,
+                    contractContext: contractABI ? await getContractContext(contractABI) : null
+                }),
+            });
+
+            const { intent, actions } = await response.json();
+            return { intent, actions };
+        } catch (error) {
+            console.error('Error analyzing intent:', error);
+            return { intent: 'unknown', actions: [] };
+        }
+    };
+
+    // Modify handleSendMessage to use intent analysis
+    const handleSendMessage = async () => {
+        if (!input.trim() || !walletAddress) return;
+        
         setIsLoading(true);
         const userMessage = { role: 'user', content: input };
         setMessages(prev => [...prev, userMessage]);
         setInput('');
 
         try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [...messages, userMessage],
-                    contractABI,
-                    contractAddress,
-                    context: {
-                        lastInteraction: localStorage.getItem('lastInteraction'),
-                        contractContext: localStorage.getItem('contractContext')
+            // Analyze user intent first
+            const { intent, actions } = await analyzeUserIntent(input);
+            console.log('Intent analysis:', { intent, actions }); // Debug log
+
+            switch (intent) {
+                case 'generate_contract':
+                    const generateEndpoint = aiModel === 'openai' ? 
+                        '/api/generate-contract' : 
+                        '/api/h_generate-contract';
+                    await generateAndDeploy(input, generateEndpoint);
+                    break;
+
+                case 'connect_contract':
+                    const addressMatch = input.match(/0x[a-fA-F0-9]{40}/);
+                    if (addressMatch) {
+                        const address = addressMatch[0];
+                        const abi = await getABI(address);
+                        if (abi) {
+                            setContractABI(abi);
+                            setContractAddress(address);
+                            localStorage.setItem('contractABI', JSON.stringify(abi));
+                            localStorage.setItem('contractAddress', address);
+                            setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: `Successfully connected to contract at ${address}. You can now interact with the contract.`
+                            }]);
+                        } else {
+                            setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: "Couldn't fetch the contract ABI. Please verify the contract address."
+                            }]);
+                        }
                     }
-                }),
-            });
+                    break;
 
-            const data = await response.json();
-            
-            // Handle contract connection like in int.js
-            if (data.contractAddress && !contractABI) {
-                const abi = await getABI(data.contractAddress);
-                if (abi) {
-                    setContractABI(abi);
-                    setContractAddress(data.contractAddress);
-                    
-                    // Save to localStorage
-                    localStorage.setItem('contractDetails', JSON.stringify({
-                        address: data.contractAddress,
-                        abi: abi,
-                        timestamp: Date.now()
-                    }));
+                case 'execute_functions':
+                    if (!contractABI || !contractAddress) {
+                        setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: "Please connect to a contract first before trying to execute functions."
+                        }]);
+                        return;
+                    }
 
-                    setMessages(prev => [...prev, { 
-                        role: 'assistant', 
-                        content: `Connected to contract: ${data.contractAddress}` 
-                    }]);
-                    return;
-                }
+                    if (!Array.isArray(actions) || actions.length === 0) {
+                        setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: "I couldn't determine which function to call. Please specify the function more clearly."
+                        }]);
+                        return;
+                    }
+
+                    // Process function queue from actions
+                    for (const action of actions) {
+                        console.log('Executing action:', action); // Debug log
+                        const result = await callContractFunction(action);
+                        setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: result.message
+                        }]);
+                        
+                        // Store interaction in localStorage
+                        const interactions = JSON.parse(localStorage.getItem('contractInteractions') || '[]');
+                        interactions.push({
+                            timestamp: Date.now(),
+                            function: action.name,
+                            params: action.params,
+                            result: result.success
+                        });
+                        localStorage.setItem('contractInteractions', JSON.stringify(interactions));
+                    }
+                    break;
+
+                default:
+                    // Proceed with normal chat flow
+                    const chatEndpoint = aiModel === 'openai' ? '/api/chat' : '/api/h_chat';
+                    const response = await fetch(chatEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messages: [...messages, userMessage],
+                            contractABI,
+                            contractAddress,
+                            context: {
+                                lastInteraction: localStorage.getItem('lastInteraction'),
+                                contractContext: await getContractContext(contractABI)
+                            }
+                        }),
+                    });
+
+                    const data = await response.json();
+                    setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
             }
-
-            // Handle function execution
-            if (data.functionCall) {
-                const result = await callContractFunction(data.functionCall);
-                
-                // Store interaction context
-                localStorage.setItem('lastInteraction', JSON.stringify({
-                    function: data.functionCall,
-                    timestamp: Date.now()
-                }));
-
-                setMessages(prev => [...prev, { 
-                    role: 'assistant', 
-                    content: result.message
-                }]);
-
-                if (!result.success && data.alternativeSuggestion) {
-                    setMessages(prev => [...prev, { 
-                        role: 'assistant', 
-                        content: data.alternativeSuggestion
-                    }]);
-                }
-            } else {
-                setMessages(prev => [...prev, { 
-                    role: 'assistant', 
-                    content: data.content || "I'm not quite sure what you'd like to do with the contract. Could you please rephrase your request?" 
-                }]);
-            }
-
         } catch (error) {
             console.error('Error:', error);
-            setMessages(prev => [...prev, {
-                role: 'system',
-                content: `Error: ${error.message}`
-            }]);
+            handleGeneralError(error);
         } finally {
             setIsLoading(false);
         }
@@ -416,11 +534,20 @@ export default function SmartContractChat() {
     // ... Rest of the JSX remains the same as in int.js, but update the instructions
     return (
         <div className="max-w-4xl mx-auto p-6">
-            {/* Wallet Connection Button */}
+            {/* Add model selector before wallet connection button */}
             <div className="mb-4">
+                <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className="p-2 border rounded mr-4"
+                >
+                    <option value="openai">OpenAI</option>
+                    <option value="hyperbolic">Hyperbolic</option>
+                </select>
+                
                 <button
                     onClick={connectWallet}
-                    className="bg-green-500 text-white p-3 rounded hover:bg-green-600 mb-4"
+                    className="bg-green-500 text-white p-3 rounded hover:bg-green-600"
                 >
                     {walletAddress 
                         ? `Connected: ${walletBalance} FLOW` 
@@ -474,9 +601,14 @@ export default function SmartContractChat() {
                 <h3 className="font-semibold mb-2">Instructions:</h3>
                 <ol className="list-decimal list-inside space-y-2">
                     <li>Connect your wallet using the green button above</li>
-                    <li>To create a new contract: Type "Create a contract that..." or "Generate a contract for..."</li>
-                    <li>To interact with existing contract: Enter "I want to interact with [contract address]"</li>
+                    <li>You can:
+                        <ul className="list-disc list-inside ml-4 mt-1">
+                            <li>Generate a new contract by saying "Create a contract that..."</li>
+                            <li>Interact with existing contract by saying "Connect to contract [address]"</li>
+                        </ul>
+                    </li>
                     <li>Follow the AI's instructions to interact with your contract</li>
+                    <li>The AI will help you call functions and understand responses</li>
                 </ol>
             </div>
         </div>

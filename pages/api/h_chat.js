@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.HYPERBOLIC_API_KEY,
+    baseURL: 'https://api.hyperbolic.xyz/v1'
 });
 
 export default async function handler(req, res) {
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
         };
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "meta-llama/Llama-3.3-70B-Instruct",
             messages: [systemMessage, ...messages],
             functions: [
                 {
@@ -103,7 +104,6 @@ export default async function handler(req, res) {
                         },
                         required: ["explanation"]
                     }
-
                 }
             ]
         });
@@ -141,4 +141,4 @@ export default async function handler(req, res) {
             content: "I'm having trouble processing that request. Could you please try again or rephrase it?" 
         });
     }
-}
+} 

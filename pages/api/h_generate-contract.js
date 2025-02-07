@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.HYPERBOLIC_API_KEY,
+    baseURL: 'https://api.hyperbolic.xyz/v1'
 });
 
 export default async function handler(req, res) {
@@ -34,7 +35,7 @@ contract Contract {
 }`;
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "meta-llama/Llama-3.3-70B-Instruct",
             messages: [
                 { role: "system", content: systemMessage },
                 ...(previousCode ? [{ 

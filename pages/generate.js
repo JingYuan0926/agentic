@@ -89,7 +89,13 @@ export default function ContractGenerator() {
             });
 
             const generateData = await generateResponse.json();
-            if (!generateData.success) throw new Error('Failed to generate contract');
+            if (!generateData.success) {
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: "I apologize, but I couldn't generate the contract. This might be due to API limitations or invalid requirements. Could you please try rephrasing your request?" 
+                }]);
+                return false;
+            }
             
             setContractCode(generateData.contractCode);
             setMessages(prev => [...prev, { 
@@ -104,9 +110,14 @@ export default function ContractGenerator() {
                 body: JSON.stringify({ contractCode: generateData.contractCode }),
             });
 
-            const compileData = await compileResponse.json();
+            let compileData = await compileResponse.json();
             
             if (!compileData.success) {
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: 'The initial compilation failed. Let me try to fix the contract...' 
+                }]);
+
                 // If compilation fails, try to fix the contract
                 const fixResponse = await fetch('/api/generate-contract', {
                     method: 'POST',
@@ -118,7 +129,13 @@ export default function ContractGenerator() {
                 });
 
                 const fixData = await fixResponse.json();
-                if (!fixData.success) throw new Error('Failed to fix contract');
+                if (!fixData.success) {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: "I apologize, but I couldn't fix the contract. Could you please try simplifying your requirements or provide more details?" 
+                    }]);
+                    return false;
+                }
 
                 setContractCode(fixData.contractCode);
                 
@@ -130,59 +147,100 @@ export default function ContractGenerator() {
                 });
 
                 const recompileData = await recompileResponse.json();
-                if (!recompileData.success) throw new Error('Failed to compile fixed contract');
+                if (!recompileData.success) {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: "I'm sorry, but the contract still has compilation issues. Could you please try a different approach or simplify the requirements?" 
+                    }]);
+                    return false;
+                }
                 
                 compileData = recompileData;
             }
 
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
-                content: 'Contract compiled successfully. Deploying...' 
+                content: 'Contract compiled successfully. Attempting deployment...' 
             }]);
 
-            // Deploy contract
-            const factory = new ethers.ContractFactory(
-                compileData.abi, 
-                compileData.bytecode, 
-                signer
-            );
+            try {
+                // Deploy contract
+                const factory = new ethers.ContractFactory(
+                    compileData.abi, 
+                    compileData.bytecode, 
+                    signer
+                );
 
-            const contract = await factory.deploy({
-                gasLimit: 3000000
-            });
+                const contract = await factory.deploy({
+                    gasLimit: 3000000
+                });
 
-            setMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: 'Contract deployment in progress...' 
-            }]);
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: 'Contract deployment in progress... Please confirm the transaction in MetaMask.' 
+                }]);
 
-            await contract.waitForDeployment();
-            const deployedAddress = await contract.getAddress();
-            setDeployedAddress(deployedAddress);
+                await contract.waitForDeployment();
+                const deployedAddress = await contract.getAddress();
+                setDeployedAddress(deployedAddress);
 
-            // Verify contract
-            const verifyResponse = await fetch('/api/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    address: deployedAddress,
-                    contractCode: contractCode
-                }),
-            });
+                // Set contract ABI and address for interaction
+                setContractABI(compileData.abi);
+                setContractAddress(deployedAddress);
 
-            const verifyData = await verifyResponse.json();
+                // Verify contract
+                try {
+                    const verifyResponse = await fetch('/api/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            address: deployedAddress,
+                            contractCode: contractCode
+                        }),
+                    });
 
-            setMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: `Contract deployed and verified successfully!\nAddress: ${deployedAddress}\nView on Flow Explorer: https://evm-testnet.flowscan.io/address/${deployedAddress}` 
-            }]);
+                    const verifyData = await verifyResponse.json();
+
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: `Success! Your contract has been deployed and verified.\n\nContract Address: ${deployedAddress}\nView on Flow Explorer: https://evm-testnet.flowscan.io/address/${deployedAddress}\n\nYou can now interact with your contract. What would you like to do?` 
+                    }]);
+                } catch (verifyError) {
+                    // If verification fails, still consider deployment successful
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: `Contract deployed successfully!\n\nContract Address: ${deployedAddress}\nView on Flow Explorer: https://evm-testnet.flowscan.io/address/${deployedAddress}\n\nNote: Contract verification failed, but this doesn't affect functionality. You can still interact with your contract. What would you like to do?` 
+                    }]);
+                }
+
+                return true;
+            } catch (deployError) {
+                if (deployError.message.includes('insufficient funds')) {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: "Deployment failed: You don't have enough FLOW tokens to deploy the contract. Please make sure you have enough FLOW in your wallet and try again." 
+                    }]);
+                } else if (deployError.message.includes('user rejected')) {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: "You rejected the deployment transaction. Would you like to try deploying again?" 
+                    }]);
+                } else {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: `Deployment failed: ${deployError.message}. Would you like to try again?` 
+                    }]);
+                }
+                return false;
+            }
 
         } catch (error) {
             console.error('Error:', error);
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
-                content: `Error: ${error.message}` 
+                content: "I encountered an unexpected error. This might be due to network issues or invalid input. Would you like to try again?" 
             }]);
+            return false;
         }
     };
 
