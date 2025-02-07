@@ -288,17 +288,18 @@ export default function SmartContractChat() {
             if (!signer || !contractAddress || !contractABI) {
                 return {
                     success: false,
-                    message: "Contract not properly initialized. Please connect to a contract first."
+                    message: "Contract not properly initialized."
                 };
             }
 
             const contract = new ethers.Contract(contractAddress, contractABI, signer);
             const { name, params = [], value = null } = functionDetails;
 
-            // Find function in ABI
-            const abiFunction = contractABI.find(f => 
-                f.type === 'function' && f.name === name
-            );
+            // Find exact function signature in ABI
+            const abiFunction = contractABI.find(f => {
+                if (f.type !== 'function' || f.name !== name) return false;
+                return f.inputs.length === params.length;
+            });
 
             if (!abiFunction) {
                 return {
@@ -307,10 +308,6 @@ export default function SmartContractChat() {
                 };
             }
 
-            // Special handling for payable functions
-            const isPayable = abiFunction.stateMutability === 'payable';
-            let txOptions = {};
-
             // Convert parameters based on their ABI types
             const convertedParams = params.map((param, index) => {
                 const input = abiFunction.inputs[index];
@@ -318,85 +315,78 @@ export default function SmartContractChat() {
 
                 try {
                     if (input.type === 'uint256' || input.type === 'uint') {
-                        // For token amounts, use parseUnits with proper decimals
-                        if (input.name.toLowerCase().includes('amount') || 
-                            input.name.toLowerCase().includes('value')) {
-                            // If this is the amount for a payable function, set it as value
-                            if (isPayable && index === 0) {
-                                txOptions.value = ethers.parseEther(param.toString());
-                                return txOptions.value;
-                            }
-                            return ethers.parseUnits(param.toString(), 18); // Using 18 decimals as default
+                        const numericValue = parseFloat(param);
+                        if (isNaN(numericValue)) {
+                            throw new Error(`Invalid number: ${param}`);
                         }
-                        return ethers.getBigInt(param.toString());
+
+                        // Check if parameter is likely to be an amount based on ABI context
+                        const isAmountParam = input.name.toLowerCase().includes('amount') || 
+                                            input.name.toLowerCase().includes('value') ||
+                                            input.name.toLowerCase().includes('balance');
+                        
+                        if (isAmountParam) {
+                            // Convert to raw value (no decimals)
+                            const rawValue = BigInt(Math.floor(numericValue * 1e18));
+                            console.log('Amount conversion:', {
+                                original: numericValue,
+                                converted: rawValue.toString()
+                            });
+                            return rawValue;
+                        }
+                        // For other uint parameters (like password)
+                        return ethers.getBigInt(Math.floor(numericValue).toString());
                     }
-                    // For address parameters
                     if (input.type === 'address') {
-                        return ethers.getAddress(param); // Ensures proper address format
+                        return ethers.getAddress(param);
+                    }
+                    if (input.type === 'string') {
+                        return param.toString();
                     }
                     return param;
                 } catch (error) {
-                    console.error(`Parameter conversion error for ${input.name}:`, error);
-                    throw new Error(`Invalid parameter for ${input.name}: ${param}`);
+                    console.error(`Parameter conversion error:`, error);
+                    throw error;
                 }
             });
 
-            // Debug logging
-            console.log('Contract call details:', {
-                functionName: name,
-                convertedParams,
-                txOptions,
-                isPayable,
-                abiFunction
+            // Handle value for payable functions
+            const txOptions = {};
+            if (abiFunction.stateMutability === 'payable' && params.length > 0) {
+                const numericValue = parseFloat(params[0]);
+                const rawValue = BigInt(Math.floor(numericValue * 1e18));
+                txOptions.value = rawValue;
+            }
+
+            console.log('Contract call:', {
+                function: name,
+                originalParams: params,
+                convertedParams: convertedParams.map(p => p.toString()),
+                txOptions: txOptions.value ? txOptions.value.toString() : 'none'
             });
 
-            // Execute the contract call
-            try {
-                const result = isPayable
-                    ? await contract[name](...convertedParams, txOptions)
-                    : await contract[name](...convertedParams);
+            const result = Object.keys(txOptions).length > 0
+                ? await contract[name](...convertedParams, txOptions)
+                : await contract[name](...convertedParams);
 
-                if (result.wait) {
-                    const receipt = await result.wait();
-                    console.log('Transaction receipt:', receipt);
-                    return {
-                        success: true,
-                        message: `Transaction completed successfully! ${txOptions.value ? 
-                            `Sent ${ethers.formatEther(txOptions.value)} FLOW.` : ''}`
-                    };
-                }
-
-                // Format result for view functions
-                const formattedResult = abiFunction.outputs?.length === 1 &&
-                    (abiFunction.outputs[0].type === 'uint256' || abiFunction.outputs[0].type === 'uint')
-                    ? ethers.formatUnits(result, 18)
-                    : result.toString();
-
+            if (result.wait) {
+                await result.wait();
+                const amount = params[0];
                 return {
                     success: true,
-                    message: `Result: ${formattedResult}`
-                };
-
-            } catch (error) {
-                console.error('Execution error:', error);
-                // Provide more detailed error message
-                const errorMessage = error.reason || 
-                                   error.data?.message || 
-                                   error.message || 
-                                   'Transaction failed';
-                
-                if (errorMessage.includes('Incorrect amount')) {
-                    return {
-                        success: false,
-                        message: `Please ensure the amount matches exactly what the contract expects. Error: ${errorMessage}`
-                    };
-                }
-
-                return {
-                    success: false,
-                    message: `Error: ${errorMessage}`
+                    message: `Transaction completed successfully! ${amount ? `${amount} FLOW.` : ''}`
                 };
             }
+
+            // For view functions, convert the result back from wei if it's a balance
+            const formattedResult = result && abiFunction.outputs?.[0]?.type === 'uint256'
+                ? ethers.formatEther(result)
+                : result.toString();
+
+            return {
+                success: true,
+                message: `Result: ${formattedResult}`
+            };
 
         } catch (error) {
             console.error('Contract call error:', error);
@@ -405,6 +395,12 @@ export default function SmartContractChat() {
                 message: `Error: ${error.reason || error.message}`
             };
         }
+    };
+
+    // Helper function to check if string is numeric
+    const isNumeric = (str) => {
+        if (typeof str !== "string") return false;
+        return !isNaN(str) && !isNaN(parseFloat(str));
     };
 
     // New helper functions for contract interaction
