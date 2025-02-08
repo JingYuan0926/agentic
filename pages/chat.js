@@ -505,42 +505,45 @@ function ChatComponent() {
                             throw new Error('Failed to receive contract data');
                         }
 
-                        // Deploy contract
+                        // Modify contract deployment section
                         addMessage('assistant', 'Deploying contract...', 'Codey');
+                        
+                        // Add signer check
+                        if (!signer) {
+                            throw new Error('Please connect your wallet first');
+                        }
+
+                        // Get the signer again to ensure it's fresh
+                        const provider = new BrowserProvider(walletProvider);
+                        const currentSigner = await provider.getSigner();
+                        
+                        // Create contract factory with proper signer
                         const factory = new ethers.ContractFactory(
                             contractData.abi,
                             contractData.bytecode,
-                            signer
+                            currentSigner  // Use the fresh signer
                         );
 
                         const contract = await factory.deploy({
                             gasLimit: 3000000
                         });
 
-                        addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
-                        
-                        // Get contract address
-                        const deployedAddress = await contract.getAddress();
-                        console.log('Deployed address:', deployedAddress); // Debug log
-
-                        // Wait for deployment confirmation
-                        const receipt = await contract.deploymentTransaction().wait(2);
-                        addMessage('assistant', `Contract deployed to: ${deployedAddress}`, 'Codey');
+                        addMessage('assistant', `Contract deployed to: ${contract.address}`, 'Codey');
 
                         // Set contract as connected
-                        setConnectedContract(deployedAddress);
+                        setConnectedContract(contract.address);
                         setIsContractConnected(true);
-                        addTeamUpdate('System', `Connected to contract ${deployedAddress}`);
+                        addTeamUpdate('System', `Connected to contract ${contract.address}`);
 
                         // Wait before verification
                         await new Promise(resolve => setTimeout(resolve, 5000));
 
-                        // Verify contract with the correct address
+                        // Verify contract
                         const verifyResponse = await fetch('/api/verify', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                address: deployedAddress,
+                                address: contract.address,
                                 contractCode: contractData.contractCode
                             })
                         });
@@ -548,14 +551,14 @@ function ChatComponent() {
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
                             addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
-                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${deployedAddress}`, 'Codey');
+                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${contract.address}`, 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
 
                     } catch (error) {
                         console.error('Deployment error:', error);
-                        addMessage('system', `Error: ${error.message}`, 'System');
+                        addMessage('system', `Error: ${error.message}`);
                     }
                 }
                 // If Finn detects contract connection request
@@ -663,30 +666,58 @@ function ChatComponent() {
         }
     };
 
-    // Fix contract deployment in executeContractFunction
+    // Update executeContractFunction to match your previous working version
     const executeContractFunction = async (functionInfo, params) => {
         try {
             if (!signer || !connectedContract) {
                 throw new Error('Contract or signer not initialized');
             }
 
-            const contract = new ethers.Contract(connectedContract, [functionInfo], signer);
-            
-            let tx;
+            console.log('Function execution details:', {
+                functionInfo,
+                params,
+                contractAddress: connectedContract
+            });
+
+            // Create minimal ABI array with just the function we need
+            const minimalABI = [{
+                name: functionInfo.name,
+                type: 'function',
+                inputs: functionInfo.inputs,
+                outputs: functionInfo.outputs,
+                stateMutability: functionInfo.stateMutability
+            }];
+
+            const contract = new ethers.Contract(connectedContract, minimalABI, signer);
+
+            // Handle payable functions
+            let txOptions = {};
+            let processedParams = [];
+
             if (functionInfo.stateMutability === 'payable') {
-                tx = await contract[functionInfo.name]({ value: params.value });
-            } else if (Array.isArray(params)) {
-                tx = await contract[functionInfo.name](...params);
+                const amount = params.amount || Object.values(params)[0];
+                txOptions = { value: ethers.parseEther(amount.toString()) };
+                console.log('Payable transaction:', { amount, wei: txOptions.value.toString() });
             } else {
-                tx = await contract[functionInfo.name]();
+                processedParams = Object.values(params);
             }
 
+            // Execute the function
+            const tx = await contract[functionInfo.name](
+                ...processedParams,
+                txOptions
+            );
+
+            addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+            
             const receipt = await tx.wait();
+            
             return {
                 success: true,
                 message: `Transaction successful! Hash: ${receipt.hash}`,
                 hash: receipt.hash
             };
+
         } catch (error) {
             console.error('Contract execution error:', error);
             return {
