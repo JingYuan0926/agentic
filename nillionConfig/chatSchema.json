@@ -27,11 +27,11 @@
       "content": {
         "type": "object",
         "properties": {
-          "$share": {
+          "$allot": {
             "type": "string"
           }
         },
-        "required": ["$share"]
+        "required": ["$allot"]
       },
       "timestamp": {
         "type": "string",

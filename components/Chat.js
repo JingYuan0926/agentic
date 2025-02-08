@@ -1,9 +1,15 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
+import dynamic from 'next/dynamic';
 import nillionService from '../services/nillionService.js';
 
-function Chat({ selectedChatId, onNewChat }) {
+// Disable SSR for the Chat component
+const Chat = dynamic(() => Promise.resolve(ChatComponent), {
+    ssr: false
+});
+
+function ChatComponent({ selectedChatId, onNewChat }) {
     const { address, isConnected } = useWeb3ModalAccount();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');

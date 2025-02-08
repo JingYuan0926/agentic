@@ -22,7 +22,7 @@ async function main() {
     }
 
     // Create new schema
-    const newSchema = await org.createSchema(schema, 'Chat History');
+    const newSchema = await org.createSchema(schema, 'AI Chat History');
     console.log('📚 New Schema:', newSchema);
 
     // Save the schema ID

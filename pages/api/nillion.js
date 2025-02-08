@@ -49,10 +49,10 @@ export default async function handler(req, res) {
         
         // Group by chatId and get latest message for each chat
         const chats = allMessages.reduce((acc, msg) => {
-          if (!acc[msg.chatId]) {
+          if (!acc[msg.chatId] || new Date(msg.timestamp) > new Date(acc[msg.chatId].timestamp)) {
             acc[msg.chatId] = {
               id: msg.chatId,
-              title: msg.title,
+              title: msg.title || 'New Chat',
               timestamp: msg.timestamp
             };
           }
