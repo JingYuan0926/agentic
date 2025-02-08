@@ -1,7 +1,17 @@
+'use client'
 import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
+import { useWeb3ModalAccount } from '@web3modal/ethers/react';
+import dynamic from 'next/dynamic';
+import Header from '../components/Header';
+import { NilQLWrapper } from 'nillion-sv-wrappers';
 
-export default function Chat() {
+// Create SSR-safe component
+const Chat = dynamic(() => Promise.resolve(ChatComponent), {
+    ssr: false
+});
+
+function ChatComponent() {
     const [messages, setMessages] = useState([]);
     const [teamUpdates, setTeamUpdates] = useState([]);
     const [input, setInput] = useState('');
@@ -23,13 +33,32 @@ export default function Chat() {
     const [isContractConnected, setIsContractConnected] = useState(false);
     const [connectedContract, setConnectedContract] = useState('');
 
-    // Clear localStorage on mount
+    const { address, isConnected } = useWeb3ModalAccount();
+
+    // Add error state for consistency with nillion-test.js
+    const [error, setError] = useState('');
+
+    // Add new state for client-side rendering
+    const [isClient, setIsClient] = useState(false);
+
+    // Add new state for chat history (keep all other existing state)
+    const [chatHistory, setChatHistory] = useState([]);
+    const [currentChatId, setCurrentChatId] = useState(Date.now().toString());
+
+    // Add nilQL wrapper state
+    const [nilQLWrapper, setNilQLWrapper] = useState(null);
+
+    // Handle client-side initialization
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            localStorage.clear(); // Clear all storage on reload
-            loadHistory();
-        }
+        setIsClient(true);
     }, []);
+
+    // Move wallet connection check to useEffect
+    useEffect(() => {
+        if (isClient && isConnected && address) {
+            loadChatHistory();
+        }
+    }, [isClient, isConnected, address]);
 
     // Auto-scroll chat boxes
     useEffect(() => {
@@ -41,12 +70,83 @@ export default function Chat() {
         }
     }, [messages, teamUpdates]);
 
-    const loadHistory = () => {
-        if (typeof window !== 'undefined') {
-            const chatHistory = localStorage.getItem('chatHistory');
-            const updates = localStorage.getItem('teamUpdates');
-            if (chatHistory) setMessages(JSON.parse(chatHistory));
-            if (updates) setTeamUpdates(JSON.parse(updates));
+    // Initialize nilQL wrapper
+    useEffect(() => {
+        const initNilQL = async () => {
+            const cluster = {
+                nodes: [{}, {}, {}] // Three nodes for encryption
+            };
+            const wrapper = new NilQLWrapper(cluster);
+            await wrapper.init();
+            setNilQLWrapper(wrapper);
+        };
+        initNilQL();
+    }, []);
+
+    // Modify loadChatHistory to handle decryption
+    const loadChatHistory = async () => {
+        if (!isConnected || !address || !nilQLWrapper) return;
+        
+        try {
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'read',
+                    walletAddress: address
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to load chat history');
+            
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                // Group and decrypt messages
+                const chats = {};
+                
+                for (const item of data) {
+                    if (item.walletAddress !== address) continue;
+                    
+                    const message = JSON.parse(item.message);
+                    const chatId = message.chatId || 'default';
+                    
+                    // Decrypt message content if encrypted
+                    let decryptedMessage = { ...message };
+                    if (message.content && typeof message.content === 'object' && message.content.$allot) {
+                        try {
+                            const decryptedContent = await nilQLWrapper.decrypt(message.content.$allot);
+                            decryptedMessage.content = decryptedContent;
+                        } catch (e) {
+                            console.error('Failed to decrypt message:', e);
+                            decryptedMessage.content = 'Encrypted message (cannot decrypt)';
+                        }
+                    }
+
+                    if (!chats[chatId]) {
+                        chats[chatId] = {
+                            id: chatId,
+                            messages: [],
+                            timestamp: message.timestamp,
+                            walletAddress: item.walletAddress
+                        };
+                    }
+                    chats[chatId].messages.push(decryptedMessage);
+                }
+
+                const chatList = Object.values(chats)
+                    .sort((a, b) => b.timestamp - a.timestamp)
+                    .filter(chat => chat.walletAddress === address);
+
+                setChatHistory(chatList);
+                
+                if (chatList.length > 0) {
+                    setCurrentChatId(chatList[0].id);
+                    setMessages(chatList[0].messages);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load chat history:', error);
+            addMessage('system', 'Failed to load chat history');
         }
     };
 
@@ -105,31 +205,157 @@ export default function Chat() {
         }
     };
 
-    const addMessage = (role, content, agent = null) => {
+    // Modify startNewChat to preserve old chat
+    const startNewChat = () => {
+        // Save current chat to history if it has messages
+        if (messages.length > 0) {
+            setChatHistory(prev => [{
+                id: currentChatId,
+                messages: [...messages],
+                timestamp: Date.now()
+            }, ...prev]);
+        }
+
+        // Start new chat
+        const newChatId = Date.now().toString();
+        setCurrentChatId(newChatId);
+        setMessages([]);
+    };
+
+    // Add chat selection handler
+    const selectChat = (chatId) => {
+        const selectedChat = chatHistory.find(chat => chat.id === chatId);
+        if (selectedChat) {
+            setCurrentChatId(chatId);
+            setMessages(selectedChat.messages);
+        }
+    };
+
+    // Modify addMessage to include encryption
+    const addMessage = async (role, content, agent = null) => {
+        if (!isConnected || !address || !nilQLWrapper) return;
+
         const newMessage = {
             role,
             content,
             agent,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            chatId: currentChatId || Date.now().toString(),
+            walletAddress: address
         };
-        setMessages(prev => {
-            const updated = [...prev, newMessage];
-            localStorage.setItem('chatHistory', JSON.stringify(updated));
-            return updated;
-        });
+
+        try {
+            // Encrypt the message content
+            const shares = await nilQLWrapper.encrypt(content);
+            const encryptedMessage = {
+                ...newMessage,
+                content: { $allot: shares } // Store encrypted shares
+            };
+
+            await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'store',
+                    walletAddress: address,
+                    message: JSON.stringify(encryptedMessage),
+                    chatId: currentChatId
+                }),
+            });
+
+            // Use unencrypted message for UI
+            setMessages(prev => [...prev, newMessage]);
+            
+            if (!currentChatId) {
+                const newChat = {
+                    id: newMessage.chatId,
+                    messages: [newMessage],
+                    timestamp: newMessage.timestamp,
+                    walletAddress: address
+                };
+                setChatHistory(prev => [newChat, ...prev]);
+                setCurrentChatId(newMessage.chatId);
+            }
+        } catch (error) {
+            console.error('Failed to store message:', error);
+        }
     };
 
-    const addTeamUpdate = (agent, update) => {
+    // Modify addTeamUpdate to store in Nillion
+    const addTeamUpdate = async (agent, update) => {
+        if (!isConnected || !address) {
+            console.error('Wallet not connected');
+            return;
+        }
+
         const newUpdate = {
             agent,
             update,
             timestamp: Date.now()
         };
-        setTeamUpdates(prev => {
-            const updated = [...prev, newUpdate];
-            localStorage.setItem('teamUpdates', JSON.stringify(updated));
-            return updated;
-        });
+
+        try {
+            // Store in Nillion with a special suffix for updates
+            await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'store',
+                    walletAddress: `${address}_updates`,
+                    message: JSON.stringify(newUpdate)
+                }),
+            });
+
+            setTeamUpdates(prev => [...prev, newUpdate]);
+        } catch (error) {
+            console.error('Failed to store team update:', error);
+        }
+    };
+
+    // Add delete functionality
+    const handleDeleteMessage = async (timestamp) => {
+        if (!isConnected || !address) return;
+        
+        try {
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'delete',
+                    walletAddress: address,
+                    messageId: timestamp
+                }),
+            });
+
+            if (response.ok) {
+                setMessages(prev => prev.filter(msg => msg.timestamp !== timestamp));
+            }
+        } catch (error) {
+            console.error('Failed to delete message:', error);
+        }
+    };
+
+    // Add delete functionality for team updates
+    const handleDeleteUpdate = async (timestamp) => {
+        if (!isConnected || !address) return;
+        
+        try {
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'delete',
+                    walletAddress: `${address}_updates`,
+                    messageId: timestamp
+                }),
+            });
+
+            if (response.ok) {
+                setTeamUpdates(prev => prev.filter(update => update.timestamp !== timestamp));
+            }
+        } catch (error) {
+            console.error('Failed to delete update:', error);
+        }
     };
 
     // Handle contract connection status
@@ -390,70 +616,88 @@ export default function Chat() {
         }
     };
 
-    // Update executeContractFunction to handle the structured data
+    // Fix contract deployment in executeContractFunction
     const executeContractFunction = async (functionInfo, params) => {
         try {
             if (!signer || !connectedContract) {
                 throw new Error('Contract or signer not initialized');
             }
 
-            console.log('Function execution details:', {
-                functionInfo,
-                params,
-                contractAddress: connectedContract
-            });
-
-            const minimalABI = [{
-                name: functionInfo.name,
-                type: 'function',
-                inputs: functionInfo.inputs,
-                outputs: functionInfo.outputs,
-                stateMutability: functionInfo.stateMutability
-            }];
-
-            const contract = new ethers.Contract(connectedContract, minimalABI, signer);
-
+            const contract = new ethers.Contract(connectedContract, [functionInfo], signer);
+            
             let tx;
             if (functionInfo.stateMutability === 'payable') {
-                // For payable functions, use the value in txOptions
-                const txOptions = { value: params.value };
-                tx = await contract[functionInfo.name](txOptions);
+                tx = await contract[functionInfo.name]({ value: params.value });
             } else if (Array.isArray(params)) {
-                // For functions with parameters, spread the array
                 tx = await contract[functionInfo.name](...params);
             } else {
-                // For functions without parameters
                 tx = await contract[functionInfo.name]();
             }
 
-            addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
-            
             const receipt = await tx.wait();
-            
             return {
                 success: true,
                 message: `Transaction successful! Hash: ${receipt.hash}`,
                 hash: receipt.hash
             };
-
         } catch (error) {
             console.error('Contract execution error:', error);
-            const reason = error.reason || error.message;
             return {
                 success: false,
-                message: `Error: ${reason}`
+                message: `Error: ${error.reason || error.message}`
             };
         }
     };
 
     return (
-        <div className="flex h-screen p-4 gap-4">
-            {/* Chat Box - Left Side */}
-            <div className="flex-1 flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold">Chat with AI Team</h2>
-                        <div className="relative flex items-center gap-2">
+        <div className="flex flex-col h-screen">
+            <Header />
+            <div className="flex flex-1 overflow-hidden">
+                {/* Chat History Sidebar */}
+                <div className="w-64 bg-white shadow-md overflow-y-auto">
+                    <div className="p-4">
+                        <button
+                            onClick={startNewChat}
+                            className="w-full mb-4 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                            New Chat
+                        </button>
+                        {/* Current Chat */}
+                        {messages.length > 0 && (
+                            <div className="cursor-pointer bg-blue-100 p-3 rounded mb-2">
+                                <div className="text-sm truncate">
+                                    {messages[0].content.substring(0, 30)}...
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    {new Date(messages[0].timestamp).toLocaleDateString()}
+                                </div>
+                            </div>
+                        )}
+                        {/* Chat History */}
+                        {chatHistory.map(chat => (
+                            chat.id !== currentChatId && (
+                                <div 
+                                    key={chat.id}
+                                    onClick={() => selectChat(chat.id)}
+                                    className="cursor-pointer hover:bg-gray-100 p-3 rounded mb-2"
+                                >
+                                    <div className="text-sm truncate">
+                                        {chat.messages[0].content.substring(0, 30)}...
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {new Date(chat.messages[0].timestamp).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            )
+                        ))}
+                    </div>
+                </div>
+
+                {/* Main Chat Area */}
+                <div className="flex-1 flex flex-col">
+                    {/* Contract Connection Status */}
+                    <div className="p-4 border-b flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                             <div 
                                 className={`w-3 h-3 rounded-full ${
                                     isContractConnected 
@@ -465,94 +709,88 @@ export default function Chat() {
                                     : 'No contract connected'
                                 }
                             />
-                            {isContractConnected && (
-                                <button
-                                    onClick={handleDisconnectContract}
-                                    className="text-xs px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                >
-                                    Disconnect
-                                </button>
-                            )}
+                            <span className="text-sm text-gray-600">
+                                {isContractConnected ? `Connected to ${connectedContract}` : 'No contract connected'}
+                            </span>
                         </div>
+                        {isContractConnected && (
+                            <button
+                                onClick={handleDisconnectContract}
+                                className="text-xs px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                            >
+                                Disconnect
+                            </button>
+                        )}
                     </div>
-                </div>
-                
-                {/* Wallet Connection */}
-                <div className="mb-4">
-                    <button
-                        onClick={connectWallet}
-                        className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
-                    >
-                        {walletAddress 
-                            ? `Connected: ${walletBalance} FLOW` 
-                            : 'Connect Wallet'}
-                    </button>
-                </div>
 
-                {/* Messages */}
-                <div 
-                    ref={chatBoxRef}
-                    className="flex-1 overflow-y-auto mb-4 border rounded p-4 bg-gray-50"
-                >
-                    {messages.map((msg, index) => (
-                        <div
-                            key={index}
-                            className={`mb-4 p-3 rounded ${
-                                msg.role === 'user'
-                                    ? 'bg-blue-100 ml-auto max-w-[80%]'
-                                    : msg.role === 'assistant'
-                                    ? 'bg-white max-w-[80%]'
-                                    : 'bg-gray-200 max-w-[80%] text-sm'
-                            }`}
-                        >
-                            {msg.agent && <div className="text-xs font-bold mb-1">{msg.agent}</div>}
-                            {msg.content}
-                        </div>
-                    ))}
-                    {isLoading && (
-                        <div className="text-gray-500 italic">Processing...</div>
-                    )}
-                </div>
-
-                {/* Input Area */}
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                        placeholder="Type your message..."
-                        className="flex-1 p-2 border rounded"
-                        disabled={isLoading || !walletAddress}
-                    />
-                    <button
-                        onClick={handleSendMessage}
-                        disabled={isLoading || !input.trim() || !walletAddress}
-                        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
-                    >
-                        Send
-                    </button>
-                </div>
-            </div>
-
-            {/* Team Updates - Right Side */}
-            <div className="w-1/3">
-                <h2 className="text-xl font-bold mb-4">Team Updates</h2>
-                <div 
-                    ref={updateBoxRef}
-                    className="h-[calc(100vh-8rem)] overflow-y-auto border rounded p-4 bg-gray-50"
-                >
-                    {teamUpdates.map((update, index) => (
-                        <div key={index} className="mb-4 p-3 rounded bg-white">
-                            <div className="font-bold text-sm mb-1">{update.agent}</div>
-                            <div className="text-sm">{update.update}</div>
-                            <div className="text-xs text-gray-500 mt-1">
-                                {new Date(update.timestamp).toLocaleTimeString()}
+                    {/* Messages Area */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {error && (
+                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                                {error}
                             </div>
-                        </div>
-                    ))}
+                        )}
+
+                        {isClient && messages.length > 0 && (
+                            <div className="space-y-4">
+                                {messages.map((msg, index) => (
+                                    <div key={index} className={`p-3 rounded max-w-[80%] ${
+                                        msg.role === 'user' 
+                                            ? 'bg-blue-100 ml-auto' 
+                                            : msg.role === 'assistant'
+                                                ? 'bg-white'
+                                                : 'bg-gray-100'
+                                    }`}>
+                                        {msg.agent && (
+                                            <p className="text-xs font-semibold mb-1">{msg.agent}</p>
+                                        )}
+                                        <p className="text-sm">{msg.content}</p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {new Date(msg.timestamp).toLocaleTimeString()}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {isLoading && (
+                            <div className="text-center py-4 text-gray-600">
+                                Processing...
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Input Area */}
+                    <div className="p-4 border-t">
+                        {!isConnected ? (
+                            <div className="text-center py-4 text-gray-600">
+                                Please connect your wallet to chat
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <textarea
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                                    className="flex-1 p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Type your message here"
+                                    rows="3"
+                                    disabled={isLoading}
+                                />
+                                <button
+                                    onClick={handleSendMessage}
+                                    disabled={isLoading || !input.trim()}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-blue-300"
+                                >
+                                    Send
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
     );
 }
+
+export default Chat;
