@@ -115,13 +115,7 @@ function ChatComponent() {
                         
                         let content = messageData.content;
                         if (content && content.$allot) {
-                            try {
-                                content = await nilQLWrapper.decrypt(content.$allot);
-                                console.log('🔓 Decrypted content:', content);
-                            } catch (e) {
-                                console.error('Failed to decrypt message:', e);
-                                content = 'Encrypted message (cannot decrypt)';
-                            }
+                            content = await decryptMessage(content);
                         }
 
                         return {
@@ -260,15 +254,20 @@ function ChatComponent() {
         }
     };
 
-    // Modify addMessage to properly encrypt and save to Nillion
+    // Modify addMessage function to include encryption
     const addMessage = async (role, content, agent = null) => {
         if (!isConnected || !address || !nilQLWrapper) return;
         
         try {
             const timestamp = Date.now();
+            
+            // Encrypt the content
+            const encryptedContent = await nilQLWrapper.encrypt(content);
+            console.log('🔒 Encrypting message...');
+
             const messageData = {
                 role,
-                content,
+                content: { $allot: encryptedContent }, // Store encrypted content
                 agent,
                 timestamp,
                 chatId: currentChatId || timestamp.toString()
@@ -288,8 +287,8 @@ function ChatComponent() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            // Update local state immediately
-            const newMessage = { role, content, agent, timestamp };
+            // Update local state with unencrypted content for display
+            const newMessage = { role, content, agent, timestamp }; // Use original content for display
             setMessages(prev => [...prev, newMessage]);
 
             // Update chat history if needed
@@ -304,6 +303,7 @@ function ChatComponent() {
                 }, ...prev]);
             }
 
+            console.log('💾 Message stored successfully');
             return messageData.chatId;
         } catch (error) {
             console.error('Failed to store message:', error);
@@ -313,6 +313,21 @@ function ChatComponent() {
                 timestamp: Date.now()
             }]);
             throw error;
+        }
+    };
+
+    // Add decryption helper function
+    const decryptMessage = async (encryptedContent) => {
+        try {
+            if (encryptedContent && encryptedContent.$allot) {
+                const decryptedContent = await nilQLWrapper.decrypt(encryptedContent.$allot);
+                console.log('🔓 Message decrypted');
+                return decryptedContent;
+            }
+            return encryptedContent; // Return as-is if not encrypted
+        } catch (error) {
+            console.error('Failed to decrypt message:', error);
+            return 'Encrypted message (cannot decrypt)';
         }
     };
 
