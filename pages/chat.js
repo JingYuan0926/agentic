@@ -263,57 +263,56 @@ function ChatComponent() {
     // Modify addMessage to properly encrypt and save to Nillion
     const addMessage = async (role, content, agent = null) => {
         if (!isConnected || !address || !nilQLWrapper) return;
-
-        const timestamp = Date.now();
-        const chatId = currentChatId || timestamp.toString();
-
+        
         try {
-            // Encrypt the content
-            const encryptedContent = await nilQLWrapper.encrypt(content);
-            console.log('🔒 Encrypted content:', encryptedContent); // Add logging
-
+            const timestamp = Date.now();
             const messageData = {
                 role,
-                content: { $allot: encryptedContent },
+                content,
                 agent,
                 timestamp,
-                chatId,
-                walletAddress: address
+                chatId: currentChatId || timestamp.toString()
             };
 
-            // Save to Nillion
             const response = await fetch('/api/nillion-test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'store',
                     walletAddress: address,
-                    message: JSON.stringify(messageData),
-                    chatId
+                    message: JSON.stringify(messageData)
                 }),
             });
 
-            const result = await response.json();
-            if (!result.success) throw new Error(result.message || 'Failed to store message');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             
-            // Update local state with unencrypted message for display
+            // Update local state immediately
             const newMessage = { role, content, agent, timestamp };
             setMessages(prev => [...prev, newMessage]);
 
+            // Update chat history if needed
             if (!currentChatId) {
-                setCurrentChatId(chatId);
+                const newChatId = timestamp.toString();
+                setCurrentChatId(newChatId);
                 setChatHistory(prev => [{
-                    id: chatId,
+                    id: newChatId,
                     messages: [newMessage],
                     timestamp,
                     walletAddress: address
                 }, ...prev]);
             }
 
-            return chatId;
+            return messageData.chatId;
         } catch (error) {
             console.error('Failed to store message:', error);
-            addMessage('system', `Error: ${error.message}`);
+            setMessages(prev => [...prev, {
+                role: 'system',
+                content: 'Failed to send message. Please try again.',
+                timestamp: Date.now()
+            }]);
+            throw error;
         }
     };
 
