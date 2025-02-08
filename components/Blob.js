@@ -1,59 +1,48 @@
-import React, { useRef, useEffect } from 'react';
-import * as THREE from 'three';
+import React, { useMemo, useRef } from "react";
+import vertexShader from "./vertexShader";
+import fragmentShader from "./fragmentShader";
+import { useFrame } from "@react-three/fiber";
+import { MathUtils } from "three";
 
 const Blob = () => {
-  const mountRef = useRef(null);
-
-  useEffect(() => {
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    mountRef.current.appendChild(renderer.domElement);
-
-    const geometry = new THREE.SphereGeometry(5, 64, 64);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x000000,
-      wireframe: true,
-      emissive: 0x0000ff,
-      emissiveIntensity: 0.5,
-    });
-
-    const blob = new THREE.Mesh(geometry, material);
-    scene.add(blob);
-
-    const light = new THREE.PointLight(0xffffff, 1, 100);
-    light.position.set(10, 10, 10);
-    scene.add(light);
-
-    camera.position.z = 15;
-
-    const clock = new THREE.Clock();
-
-    const animate = () => {
-      requestAnimationFrame(animate);
-      const time = clock.getElapsedTime();
-      const position = blob.geometry.attributes.position;
-      const vertex = new THREE.Vector3();
-      for (let i = 0; i < position.count; i++) {
-        vertex.fromBufferAttribute(position, i);
-        const offset = geometry.parameters.radius;
-        vertex.normalize().multiplyScalar(offset + 0.3 * Math.sin(time + i));
-        position.setXYZ(i, vertex.x, vertex.y, vertex.z);
-      }
-      position.needsUpdate = true;
-      material.emissive.setHSL((time / 10) % 1, 0.5, 0.5);
-      renderer.render(scene, camera);
+  const mesh = useRef();
+  const hover = useRef(false);
+  const uniforms = useMemo(() => {
+    return {
+      u_time: { value: 0 },
+      u_intensity: { value: 0.3 },
     };
+  });
 
-    animate();
+  useFrame((state) => {
+    const { clock } = state;
+    if (mesh.current) {
+      mesh.current.material.uniforms.u_time.value =
+        0.4 * clock.getElapsedTime();
 
-    return () => {
-      mountRef.current.removeChild(renderer.domElement);
-    };
-  }, []);
-
-  return <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />;
+      mesh.current.material.uniforms.u_intensity.value = MathUtils.lerp(
+        mesh.current.material.uniforms.u_intensity.value,
+        hover.current ? 1 : 0.15,
+        0.02
+      );
+    }
+  });
+  return (
+    <mesh
+      ref={mesh}
+      scale={0.8}
+      position={[0, 0, 0]}
+      onPointerOver={() => (hover.current = true)}
+      onPointerOut={() => (hover.current = false)}
+    >
+      <icosahedronGeometry args={[1, 20]} />
+      <shaderMaterial
+        vertexShader={vertexShader}
+        fragmentShader={fragmentShader}
+        uniforms={uniforms}
+      />
+    </mesh>
+  );
 };
 
 export default Blob;
