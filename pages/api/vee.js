@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { saveABI } from '../../utils/abiHandler';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
@@ -157,8 +156,7 @@ export default async function handler(req, res) {
         // Fetch ABI using the helper function
         try {
             const contractABI = await getContractABI(contractAddress);
-            await saveABI(contractABI, contractAddress);
-
+            
             teamUpdates.push(await generateTeamUpdate("abi_fetched", { 
                 message: "Contract ABI fetched successfully",
                 address: contractAddress 
