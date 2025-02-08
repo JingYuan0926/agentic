@@ -38,27 +38,52 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
             if (!response.ok) throw new Error('Failed to load chats');
             const data = await response.json();
             
+            // Group messages by chatId and combine their messages
             const chatGroups = data.reduce((acc, msg) => {
                 const chatId = msg.chatId;
-                if (!acc[chatId]) {
-                    try {
-                        const conversation = JSON.parse(msg.message);
-                        const firstUserMessage = conversation.messages.find(m => m.role === 'user');
+                
+                try {
+                    const messageData = JSON.parse(msg.message);
+                    
+                    if (!acc[chatId]) {
+                        // Initialize new chat group
                         acc[chatId] = {
                             id: chatId,
-                            title: firstUserMessage ? truncateText(firstUserMessage.content) : 'New Chat',
+                            messages: [],
                             timestamp: msg.timestamp,
-                            messageId: msg._id,
-                            fullMessage: msg.message
+                            title: ''
                         };
-                    } catch (e) {
-                        console.error('Failed to parse message:', e);
                     }
+
+                    // Add messages to the group
+                    if (messageData.messages) {
+                        acc[chatId].messages = [...acc[chatId].messages, ...messageData.messages];
+                        // Update title from the first user message if not set
+                        if (!acc[chatId].title) {
+                            const firstUserMessage = messageData.messages.find(m => m.role === 'user');
+                            if (firstUserMessage) {
+                                acc[chatId].title = truncateText(firstUserMessage.content);
+                            }
+                        }
+                    }
+
+                    // Keep the latest timestamp
+                    if (new Date(msg.timestamp) > new Date(acc[chatId].timestamp)) {
+                        acc[chatId].timestamp = msg.timestamp;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse message:', e);
                 }
+                
                 return acc;
             }, {});
 
-            setChats(Object.values(chatGroups));
+            // Sort chats by timestamp (newest first)
+            const sortedChats = Object.values(chatGroups)
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .filter(chat => chat.title); // Only show chats with titles
+
+            setChats(sortedChats);
         } catch (error) {
             console.error('Failed to load chats:', error);
             setChats([]);

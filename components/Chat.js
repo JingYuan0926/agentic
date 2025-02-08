@@ -47,6 +47,10 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
             setMessages(prev => [...prev, userMessage]);
             setInput('');
 
+            // Store user message and get chatId
+            const storedChatId = await storeMessage(userMessage);
+            const isNewChat = !chatId && storedChatId; // Check if this is a new chat
+
             // Get AI response
             const response = await fetch('/api/ai-response', {
                 method: 'POST',
@@ -61,9 +65,12 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
             const aiMessage = { role: 'assistant', content: data.response };
             setMessages(prev => [...prev, aiMessage]);
 
-            // Auto-save after first message exchange if it's a new chat
-            if (!chatId && messages.length === 0) {
-                await handleSaveToNillion();
+            // Store AI response with same chatId
+            await storeMessage(aiMessage, storedChatId);
+
+            // Only refresh sidebar for new chats (first user message)
+            if (isNewChat && onChatSaved) {
+                onChatSaved();
             }
 
         } catch (error) {
@@ -78,51 +85,69 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
         }
     };
 
-    const handleSaveToNillion = async () => {
-        if (!isConnected || messages.length === 0) return;
-        
-        setIsSaving(true);
+    const storeMessage = async (message, forcedChatId = null) => {
         try {
-            // Create a conversation object that contains all messages
-            const conversation = {
-                messages: messages.map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                })),
-                title: messages[0].content.substring(0, 30) + '...' // Use first message as title
-            };
+            let currentChatId = forcedChatId || chatId;
+            let existingData = null;
 
-            // Store the entire conversation as one record
+            // If we have a chatId, try to get existing record
+            if (currentChatId) {
+                const fetchResponse = await fetch('/api/nillion-test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'read',
+                        walletAddress: address,
+                        chatId: currentChatId
+                    }),
+                });
+
+                if (fetchResponse.ok) {
+                    existingData = await fetchResponse.json();
+                }
+            }
+
+            // If we found existing data, append to it
+            let conversation;
+            if (existingData && existingData.message) {
+                const existingConversation = JSON.parse(existingData.message);
+                conversation = {
+                    ...existingConversation,
+                    messages: [...existingConversation.messages, message]
+                };
+            } else {
+                // Create new conversation
+                conversation = {
+                    messages: [message],
+                    title: message.content.substring(0, 30) + '...'
+                };
+            }
+
+            // Store the updated/new conversation
             const response = await fetch('/api/nillion-test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'store',
                     walletAddress: address,
-                    message: JSON.stringify(conversation), // Store entire conversation as JSON string
-                    chatId: chatId || undefined // Include chatId if it exists
+                    message: JSON.stringify(conversation),
+                    chatId: currentChatId || undefined
                 }),
             });
 
-            if (!response.ok) throw new Error('Failed to save conversation');
+            if (!response.ok) throw new Error('Failed to store message');
             const result = await response.json();
             
-            // If this is a new chat, store the returned chatId
-            if (!chatId && result.chatId) {
-                setChatId(result.chatId);
+            // Set chatId for new conversations
+            if (!currentChatId && result.chatId) {
+                currentChatId = result.chatId;
+                setChatId(currentChatId);
             }
-            
-            alert('Conversation saved successfully!');
-            
-            // Call the refresh function after successful save
-            if (onChatSaved) {
-                onChatSaved();
-            }
+
+            return currentChatId;
         } catch (error) {
-            console.error('Failed to save to Nillion:', error);
-            alert('Failed to save conversation: ' + error.message);
-        } finally {
-            setIsSaving(false);
+            console.error('Failed to store message:', error);
+            throw error;
         }
     };
 
@@ -225,19 +250,6 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
                             {isLoading ? 'Sending...' : 'Send'}
                         </button>
                     </form>
-
-                    {/* Save to Nillion button */}
-                    {messages.length > 0 && (
-                        <div className="mt-4 text-center">
-                            <button
-                                onClick={handleSaveToNillion}
-                                disabled={isSaving || !isConnected}
-                                className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 w-full"
-                            >
-                                {isSaving ? 'Saving...' : 'Save Conversation to Nillion'}
-                            </button>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
