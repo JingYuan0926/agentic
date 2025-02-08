@@ -1,51 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple deposit and withdraw contract
-/// @notice This contract allows users to deposit and withdraw funds securely with a password
+/// @title A simple counter contract
+/// @notice This contract allows users to increment and decrement a counter
+/// @dev The counter is stored as a uint256
 contract Contract {
-    // Event emitted when funds are deposited
-    event Deposited(address indexed user, uint256 amount);
-    
-    // Event emitted when funds are withdrawn
-    event Withdrawn(address indexed user, uint256 amount);
-    
-    // Stores the total balance of the contract
-    uint256 private totalBalance;
-    
-    // Hash of the password for withdrawal
-    bytes32 private passwordHash;
+    uint256 private counter;
+    event CounterUpdated(uint256 newCounter);
 
-    /// @notice Constructor initializes the password hash
+    /// @notice Initialize the counter to zero
     constructor() {
-        passwordHash = keccak256(abi.encodePacked("0099"));
+        counter = 0;
     }
 
-    /// @notice Allows users to deposit funds into the contract
-    /// @dev Emits a Deposited event upon successful deposit
-    function deposit() external payable {
-        require(msg.value > 0, "Deposit amount must be greater than zero");
-        totalBalance += msg.value;
-        emit Deposited(msg.sender, msg.value);
+    /// @notice Increment the counter by 1
+    /// @dev Emits a CounterUpdated event
+    function increment() external {
+        counter++;
+        emit CounterUpdated(counter);
     }
 
-    /// @notice Allows users to withdraw funds from the contract
-    /// @param _password The password required for withdrawal
-    /// @param _amount The amount to withdraw
-    /// @dev Emits a Withdrawn event upon successful withdrawal
-    function withdraw(string calldata _password, uint256 _amount) external {
-        require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
-        require(_amount > 0, "Withdrawal amount must be greater than zero");
-        require(_amount <= totalBalance, "Insufficient balance");
-
-        totalBalance -= _amount;
-        payable(msg.sender).transfer(_amount);
-        emit Withdrawn(msg.sender, _amount);
+    /// @notice Decrement the counter by 1
+    /// @dev Emits a CounterUpdated event
+    function decrement() external {
+        require(counter > 0, "Counter cannot go below zero");
+        counter--;
+        emit CounterUpdated(counter);
     }
 
-    /// @notice Returns the total balance of the contract
-    /// @return The total balance in the contract
-    function getBalance() external view returns (uint256) {
-        return totalBalance;
+    /// @notice Get the current value of the counter
+    /// @return The current counter value
+    function getCounter() external view returns (uint256) {
+        return counter;
     }
 }

@@ -48,6 +48,9 @@ function ChatComponent() {
     // Add nilQL wrapper state
     const [nilQLWrapper, setNilQLWrapper] = useState(null);
 
+    // Add refresh trigger for chat history
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
     // Handle client-side initialization
     useEffect(() => {
         setIsClient(true);
@@ -83,7 +86,7 @@ function ChatComponent() {
         initNilQL();
     }, []);
 
-    // Modify loadChatHistory to handle decryption
+    // Modify loadChatHistory to properly handle async operations
     const loadChatHistory = async () => {
         if (!isConnected || !address || !nilQLWrapper) return;
         
@@ -92,7 +95,7 @@ function ChatComponent() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'read',
+                    action: 'readAll',
                     walletAddress: address
                 }),
             });
@@ -100,48 +103,74 @@ function ChatComponent() {
             if (!response.ok) throw new Error('Failed to load chat history');
             
             const data = await response.json();
+            console.log('📖 Read Result:', data);
+            
             if (Array.isArray(data)) {
-                // Group and decrypt messages
-                const chats = {};
-                
-                for (const item of data) {
-                    if (item.walletAddress !== address) continue;
+                const processMessage = async (item) => {
+                    if (item.walletAddress !== address) return null;
                     
-                    const message = JSON.parse(item.message);
-                    const chatId = message.chatId || 'default';
-                    
-                    // Decrypt message content if encrypted
-                    let decryptedMessage = { ...message };
-                    if (message.content && typeof message.content === 'object' && message.content.$allot) {
-                        try {
-                            const decryptedContent = await nilQLWrapper.decrypt(message.content.$allot);
-                            decryptedMessage.content = decryptedContent;
-                        } catch (e) {
-                            console.error('Failed to decrypt message:', e);
-                            decryptedMessage.content = 'Encrypted message (cannot decrypt)';
+                    try {
+                        const messageData = JSON.parse(item.message);
+                        const chatId = messageData.chatId || item.chatId;
+                        
+                        let content = messageData.content;
+                        if (content && content.$allot) {
+                            try {
+                                content = await nilQLWrapper.decrypt(content.$allot);
+                                console.log('🔓 Decrypted content:', content);
+                            } catch (e) {
+                                console.error('Failed to decrypt message:', e);
+                                content = 'Encrypted message (cannot decrypt)';
+                            }
                         }
-                    }
 
-                    if (!chats[chatId]) {
-                        chats[chatId] = {
-                            id: chatId,
+                        return {
+                            chatId,
+                            message: {
+                                role: messageData.role,
+                                content: content,
+                                agent: messageData.agent,
+                                timestamp: messageData.timestamp
+                            },
+                            timestamp: new Date(item.timestamp).getTime(),
+                            walletAddress: item.walletAddress
+                        };
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                        return null;
+                    }
+                };
+
+                // Process all messages in parallel
+                const processedMessages = await Promise.all(data.map(processMessage));
+                
+                // Group messages by chatId
+                const chatGroups = processedMessages.reduce((acc, item) => {
+                    if (!item) return acc;
+                    
+                    if (!acc[item.chatId]) {
+                        acc[item.chatId] = {
+                            id: item.chatId,
                             messages: [],
-                            timestamp: message.timestamp,
+                            timestamp: item.timestamp,
                             walletAddress: item.walletAddress
                         };
                     }
-                    chats[chatId].messages.push(decryptedMessage);
-                }
+                    
+                    acc[item.chatId].messages.push(item.message);
+                    return acc;
+                }, {});
 
-                const chatList = Object.values(chats)
-                    .sort((a, b) => b.timestamp - a.timestamp)
-                    .filter(chat => chat.walletAddress === address);
+                // Convert to array and sort by timestamp
+                const sortedChats = Object.values(chatGroups)
+                    .sort((a, b) => b.timestamp - a.timestamp);
 
-                setChatHistory(chatList);
+                setChatHistory(sortedChats);
                 
-                if (chatList.length > 0) {
-                    setCurrentChatId(chatList[0].id);
-                    setMessages(chatList[0].messages);
+                // Set current chat if none selected
+                if (sortedChats.length > 0 && !currentChatId) {
+                    setCurrentChatId(sortedChats[0].id);
+                    setMessages(sortedChats[0].messages);
                 }
             }
         } catch (error) {
@@ -231,53 +260,60 @@ function ChatComponent() {
         }
     };
 
-    // Modify addMessage to include encryption
+    // Modify addMessage to properly encrypt and save to Nillion
     const addMessage = async (role, content, agent = null) => {
         if (!isConnected || !address || !nilQLWrapper) return;
 
-        const newMessage = {
-            role,
-            content,
-            agent,
-            timestamp: Date.now(),
-            chatId: currentChatId || Date.now().toString(),
-            walletAddress: address
-        };
+        const timestamp = Date.now();
+        const chatId = currentChatId || timestamp.toString();
 
         try {
-            // Encrypt the message content
-            const shares = await nilQLWrapper.encrypt(content);
-            const encryptedMessage = {
-                ...newMessage,
-                content: { $allot: shares } // Store encrypted shares
+            // Encrypt the content
+            const encryptedContent = await nilQLWrapper.encrypt(content);
+            console.log('🔒 Encrypted content:', encryptedContent); // Add logging
+
+            const messageData = {
+                role,
+                content: { $allot: encryptedContent },
+                agent,
+                timestamp,
+                chatId,
+                walletAddress: address
             };
 
-            await fetch('/api/nillion-test', {
+            // Save to Nillion
+            const response = await fetch('/api/nillion-test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'store',
                     walletAddress: address,
-                    message: JSON.stringify(encryptedMessage),
-                    chatId: currentChatId
+                    message: JSON.stringify(messageData),
+                    chatId
                 }),
             });
 
-            // Use unencrypted message for UI
-            setMessages(prev => [...prev, newMessage]);
+            const result = await response.json();
+            if (!result.success) throw new Error(result.message || 'Failed to store message');
             
+            // Update local state with unencrypted message for display
+            const newMessage = { role, content, agent, timestamp };
+            setMessages(prev => [...prev, newMessage]);
+
             if (!currentChatId) {
-                const newChat = {
-                    id: newMessage.chatId,
+                setCurrentChatId(chatId);
+                setChatHistory(prev => [{
+                    id: chatId,
                     messages: [newMessage],
-                    timestamp: newMessage.timestamp,
+                    timestamp,
                     walletAddress: address
-                };
-                setChatHistory(prev => [newChat, ...prev]);
-                setCurrentChatId(newMessage.chatId);
+                }, ...prev]);
             }
+
+            return chatId;
         } catch (error) {
             console.error('Failed to store message:', error);
+            addMessage('system', `Error: ${error.message}`);
         }
     };
 
@@ -329,6 +365,11 @@ function ChatComponent() {
 
             if (response.ok) {
                 setMessages(prev => prev.filter(msg => msg.timestamp !== timestamp));
+                // Also update chat history
+                setChatHistory(prev => prev.map(chat => ({
+                    ...chat,
+                    messages: chat.messages.filter(msg => msg.timestamp !== timestamp)
+                })));
             }
         } catch (error) {
             console.error('Failed to delete message:', error);
@@ -474,7 +515,8 @@ function ChatComponent() {
                         );
 
                         const contract = await factory.deploy({
-                            gasLimit: 3000000
+                            gasLimit: 3000000,
+                            nonce: await signer.getNonce()
                         });
 
                         addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
@@ -649,6 +691,51 @@ function ChatComponent() {
         }
     };
 
+    // Add proper delete functionality
+    const handleDeleteChat = async (chatId) => {
+        if (!isConnected || !address) return;
+        
+        try {
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'delete',
+                    walletAddress: address,
+                    chatId: chatId
+                }),
+            });
+
+            if (response.ok) {
+                // Update local state
+                setChatHistory(prev => prev.filter(chat => chat.id !== chatId));
+                if (currentChatId === chatId) {
+                    setCurrentChatId(null);
+                    setMessages([]);
+                }
+                console.log('🗑️ Chat deleted:', chatId);
+            }
+        } catch (error) {
+            console.error('Failed to delete chat:', error);
+        }
+    };
+
+    // Add refresh trigger for chat history
+    useEffect(() => {
+        if (isClient && isConnected && address && nilQLWrapper) {
+            loadChatHistory();
+        }
+    }, [isClient, isConnected, address, nilQLWrapper, refreshTrigger]);
+
+    // Add delete button to chat messages and handle wallet disconnect
+    useEffect(() => {
+        if (!isConnected) {
+            setMessages([]);
+            setChatHistory([]);
+            setCurrentChatId(null);
+        }
+    }, [isConnected]);
+
     return (
         <div className="flex flex-col h-screen">
             <Header />
@@ -675,18 +762,36 @@ function ChatComponent() {
                         )}
                         {/* Chat History */}
                         {chatHistory.map(chat => (
-                            chat.id !== currentChatId && (
+                            chat.id !== currentChatId && chat.messages?.length > 0 && (
                                 <div 
                                     key={chat.id}
-                                    onClick={() => selectChat(chat.id)}
-                                    className="cursor-pointer hover:bg-gray-100 p-3 rounded mb-2"
+                                    className="relative group cursor-pointer hover:bg-gray-100 p-3 rounded mb-2"
                                 >
-                                    <div className="text-sm truncate">
-                                        {chat.messages[0].content.substring(0, 30)}...
+                                    <div onClick={() => selectChat(chat.id)}>
+                                        <div className="text-sm truncate">
+                                            {chat.messages[0]?.content 
+                                                ? chat.messages[0].content.substring(0, 30) + '...'
+                                                : 'Empty message'}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                            {new Date(chat.messages[0]?.timestamp || Date.now()).toLocaleDateString()}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-gray-500">
-                                        {new Date(chat.messages[0].timestamp).toLocaleDateString()}
-                                    </div>
+                                    
+                                    {/* Delete button */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteChat(chat.id);
+                                        }}
+                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100
+                                                 text-red-500 hover:text-red-700 transition-opacity"
+                                        title="Delete chat"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    </button>
                                 </div>
                             )
                         ))}
@@ -733,21 +838,27 @@ function ChatComponent() {
 
                         {isClient && messages.length > 0 && (
                             <div className="space-y-4">
-                                {messages.map((msg, index) => (
-                                    <div key={index} className={`p-3 rounded max-w-[80%] ${
-                                        msg.role === 'user' 
-                                            ? 'bg-blue-100 ml-auto' 
-                                            : msg.role === 'assistant'
-                                                ? 'bg-white'
-                                                : 'bg-gray-100'
-                                    }`}>
-                                        {msg.agent && (
-                                            <p className="text-xs font-semibold mb-1">{msg.agent}</p>
-                                        )}
-                                        <p className="text-sm">{msg.content}</p>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            {new Date(msg.timestamp).toLocaleTimeString()}
-                                        </p>
+                                {messages.map((message, index) => (
+                                    <div key={index} className="relative group">
+                                        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[80%] p-3 rounded-lg ${
+                                                message.role === 'user' 
+                                                    ? 'bg-blue-500 text-white' 
+                                                    : 'bg-gray-200'
+                                            }`}>
+                                                {message.content}
+                                            </div>
+                                        </div>
+                                        
+                                        <button
+                                            onClick={() => handleDeleteMessage(message.timestamp)}
+                                            className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100
+                                                     text-red-500 hover:text-red-700 transition-opacity"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 ))}
                             </div>
