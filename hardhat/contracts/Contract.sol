@@ -1,36 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple fund deposit and withdrawal contract
-/// @notice This contract allows users to deposit and withdraw funds with a password
+/// @title A simple counter contract
+/// @notice This contract allows users to increment, decrement, and retrieve a counter value
 contract Contract {
-    mapping(address => uint256) private balances;
-    event Deposited(address indexed user, uint256 amount);
-    event Withdrawn(address indexed user, uint256 amount);
+    uint256 private counter;
 
-    /// @notice Deposit funds into the contract
-    /// @dev Users can deposit any amount of Ether
-    function deposit() external payable {
-        require(msg.value > 0, "Deposit amount must be greater than zero");
-        balances[msg.sender] += msg.value;
-        emit Deposited(msg.sender, msg.value);
+    event CounterIncremented(uint256 newCounter);
+    event CounterDecremented(uint256 newCounter);
+
+    /// @notice Increments the counter by 1
+    /// @dev Emits a CounterIncremented event
+    function increment() external {
+        counter++;
+        emit CounterIncremented(counter);
     }
 
-    /// @notice Withdraw funds from the contract
-    /// @param amount The amount of Ether to withdraw
-    /// @param password The password required for withdrawal
-    /// @dev The provided password must match the predefined password
-    function withdraw(uint256 amount, uint256 password) external {
-        require(password == 99, "Invalid password");
-        require(balances[msg.sender] >= amount, "Insufficient balance");
-        balances[msg.sender] -= amount;
-        payable(msg.sender).transfer(amount);
-        emit Withdrawn(msg.sender, amount);
+    /// @notice Decrements the counter by 1
+    /// @dev Emits a CounterDecremented event
+    /// @dev Reverts if the counter is already at zero
+    function decrement() external {
+        require(counter > 0, "Counter cannot be decremented below zero");
+        counter--;
+        emit CounterDecremented(counter);
     }
 
-    /// @notice Get the balance of the caller
-    /// @return The balance of the caller in wei
-    function getBalance() external view returns (uint256) {
-        return balances[msg.sender];
+    /// @notice Returns the current value of the counter
+    /// @return The current counter value
+    function getCounter() external view returns (uint256) {
+        return counter;
     }
 }

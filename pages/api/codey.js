@@ -103,7 +103,10 @@ export default async function handler(req, res) {
                     11. Include proper error handling
                     12. Add input validation`
                 },
-                { role: "user", content: prompt }
+                {
+                    role: 'user',
+                    content: req.body.message || 'Generate a smart contract' // Ensure content is never null
+                }
             ],
             temperature: 0.7,
             max_tokens: 2500

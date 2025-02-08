@@ -155,8 +155,136 @@ export default function Chat() {
         addMessage('user', userMessage);
 
         try {
-            if (isContractConnected && !userMessage.toLowerCase().includes('generate')) {
-                // Call Vee for function identification
+            // When not connected, route through Finn first
+            if (!isContractConnected) {
+                const finnResponse = await fetch('/api/finn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: userMessage
+                    })
+                });
+
+                const finnData = await finnResponse.json();
+                addMessage('assistant', finnData.teamResponse, 'Finn');
+
+                // If Finn detects contract generation request
+                if (finnData.intent === 'generate') {
+                    try {
+                        const response = await fetch('/api/codey', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                message: userMessage
+                            })
+                        });
+
+                        // Use stream reading like in codeytest.js
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let contractData = null;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+
+                            for (const line of lines) {
+                                if (line.trim() && line.startsWith('data: ')) {
+                                    const eventData = JSON.parse(line.slice(6));
+                                    addMessage('assistant', eventData.status, 'Codey');
+
+                                    if (eventData.abi && eventData.bytecode) {
+                                        contractData = eventData;
+                                    }
+
+                                    if (eventData.error) {
+                                        throw new Error(eventData.status);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!contractData) {
+                            throw new Error('Failed to receive contract data');
+                        }
+
+                        // Deploy contract
+                        addMessage('assistant', 'Deploying contract...', 'Codey');
+                        const factory = new ethers.ContractFactory(
+                            contractData.abi,
+                            contractData.bytecode,
+                            signer
+                        );
+
+                        const contract = await factory.deploy({
+                            gasLimit: 3000000
+                        });
+
+                        addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
+                        await contract.waitForDeployment();
+                        const address = await contract.getAddress();
+
+                        // Wait for a few blocks
+                        const receipt = await contract.deploymentTransaction().wait(2);
+                        addMessage('assistant', `Contract deployed to: ${address}`, 'Codey');
+
+                        // Set contract as connected
+                        setConnectedContract(address);
+                        setIsContractConnected(true);
+                        addTeamUpdate('System', `Connected to contract ${address}`);
+
+                        // Wait before verification
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+
+                        // Verify contract
+                        const verifyResponse = await fetch('/api/verify', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                address: address,
+                                contractCode: contractData.contractCode
+                            })
+                        });
+
+                        const verifyData = await verifyResponse.json();
+                        if (verifyData.success) {
+                            addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
+                        } else {
+                            addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
+                        }
+
+                    } catch (error) {
+                        console.error('Codey error:', error);
+                        addMessage('system', `Error: ${error.message}`, 'System');
+                    }
+                }
+                // If Finn detects contract connection request
+                else if (finnData.intent === 'connect' && finnData.contractAddress) {
+                    setConnectedContract(finnData.contractAddress);
+                    setIsContractConnected(true);
+                    addTeamUpdate('System', `Connected to contract ${finnData.contractAddress}`);
+                    
+                    // Pass to Vee for initial analysis
+                    const veeResponse = await fetch('/api/vee', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            messages,
+                            userQuery: userMessage,
+                            context: { contractAddress: finnData.contractAddress }
+                        })
+                    });
+                    const veeData = await veeResponse.json();
+                    if (veeData.message) {
+                        addMessage('assistant', veeData.message, 'Vee');
+                    }
+                }
+            } 
+            // When connected, bypass Finn and go straight to Vee
+            else {
                 const veeResponse = await fetch('/api/vee', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -168,13 +296,11 @@ export default function Chat() {
                 });
 
                 const veeData = await veeResponse.json();
-                console.log('Vee Response:', veeData); // Debug log
-
-                if (veeData.teamUpdates) {
-                    veeData.teamUpdates.forEach(update => addTeamUpdate('Vee', update));
+                if (veeData.message) {
+                    addMessage('assistant', veeData.message, 'Vee');
                 }
 
-                // If Vee identified a function, proceed with parameter extraction
+                // Continue with Dex if Vee identified a function
                 if (veeData.success && veeData.function) {
                     addMessage('assistant', `Preparing to execute ${veeData.function.name}...`, 'Dex');
                     
@@ -234,7 +360,7 @@ export default function Chat() {
             }
         } catch (error) {
             console.error('Error:', error);
-            addMessage('assistant', `Error: ${error.message}`, 'System');
+            addMessage('system', `Error: ${error.message}`, 'System');
         } finally {
             setIsLoading(false);
         }
