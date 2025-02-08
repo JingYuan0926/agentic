@@ -4,15 +4,26 @@ import fragmentShader from "./fragmentShader";
 import { useFrame } from "@react-three/fiber";
 import { MathUtils } from "three";
 
-const Blob = () => {
+const Blob = ({ shape = 'sphere' }) => {
   const mesh = useRef();
   const hover = useRef(false);
   const uniforms = useMemo(() => {
     return {
       u_time: { value: 0 },
       u_intensity: { value: 0.3 },
+      u_shape: { value: getShapeValue(shape) },
     };
-  });
+  }, [shape]);
+
+  function getShapeValue(shape) {
+    switch(shape) {
+      case 'sphere': return 0;
+      case 'dna': return 1;
+      case 'diamond': return 2;
+      case 'torus': return 3;
+      default: return 0;
+    }
+  }
 
   useFrame((state) => {
     const { clock } = state;
@@ -27,6 +38,22 @@ const Blob = () => {
       );
     }
   });
+
+  const getGeometry = () => {
+    switch(shape) {
+      case 'sphere':
+        return <sphereGeometry args={[1, 32, 32]} />;
+      case 'dna':
+        return <torusKnotGeometry args={[0.8, 0.3, 100, 16]} />;
+      case 'diamond':
+        return <octahedronGeometry args={[1, 0]} />;
+      case 'torus':
+        return <torusGeometry args={[0.8, 0.3, 16, 100]} />;
+      default:
+        return <sphereGeometry args={[1, 32, 32]} />;
+    }
+  };
+
   return (
     <mesh
       ref={mesh}
@@ -35,7 +62,7 @@ const Blob = () => {
       onPointerOver={() => (hover.current = true)}
       onPointerOut={() => (hover.current = false)}
     >
-      <icosahedronGeometry args={[1, 20]} />
+      {getGeometry()}
       <shaderMaterial
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}

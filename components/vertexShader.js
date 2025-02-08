@@ -1,6 +1,7 @@
 const vertexShader = `
-uniform float u_intensity;
 uniform float u_time;
+uniform float u_intensity;
+uniform float u_shape;
 
 varying vec2 vUv;
 varying float vDisplacement;
@@ -8,8 +9,16 @@ varying float vDisplacement;
 // Classic Perlin 3D Noise 
 // by Stefan Gustavson
 //
+vec3 mod289(vec3 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+}
+
+vec4 mod289(vec4 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+}
+
 vec4 permute(vec4 x) {
-    return mod(((x*34.0)+1.0)*x, 289.0);
+    return mod289(((x*34.0)+10.0)*x);
 }
 
 vec4 taylorInvSqrt(vec4 r) {
@@ -20,13 +29,13 @@ vec3 fade(vec3 t) {
     return t*t*t*(t*(t*6.0-15.0)+10.0);
 }
 
-float cnoise(vec3 P) {
-    vec3 Pi0 = floor(P); // Integer part for indexing
-    vec3 Pi1 = Pi0 + vec3(1.0); // Integer part + 1
-    Pi0 = mod(Pi0, 289.0);
-    Pi1 = mod(Pi1, 289.0);
-    vec3 Pf0 = fract(P); // Fractional part for interpolation
-    vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+float pnoise(vec3 P, vec3 rep) {
+    vec3 Pi0 = mod(floor(P), rep);
+    vec3 Pi1 = mod(Pi0 + vec3(1.0), rep);
+    Pi0 = mod289(Pi0);
+    Pi1 = mod289(Pi1);
+    vec3 Pf0 = fract(P);
+    vec3 Pf1 = Pf0 - vec3(1.0);
     vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
     vec4 iy = vec4(Pi0.yy, Pi1.yy);
     vec4 iz0 = Pi0.zzzz;
@@ -36,16 +45,16 @@ float cnoise(vec3 P) {
     vec4 ixy0 = permute(ixy + iz0);
     vec4 ixy1 = permute(ixy + iz1);
 
-    vec4 gx0 = ixy0 / 7.0;
-    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+    vec4 gx0 = ixy0 * (1.0 / 7.0);
+    vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
     gx0 = fract(gx0);
     vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
     vec4 sz0 = step(gz0, vec4(0.0));
     gx0 -= sz0 * (step(0.0, gx0) - 0.5);
     gy0 -= sz0 * (step(0.0, gy0) - 0.5);
 
-    vec4 gx1 = ixy1 / 7.0;
-    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+    vec4 gx1 = ixy1 * (1.0 / 7.0);
+    vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
     gx1 = fract(gx1);
     vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
     vec4 sz1 = step(gz1, vec4(0.0));
@@ -84,20 +93,36 @@ float cnoise(vec3 P) {
     vec3 fade_xyz = fade(Pf0);
     vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
     vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
-    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x); 
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
     return 2.2 * n_xyz;
 }
 
 // End of Perlin Noise Code
 
-
 void main() {
     vUv = uv;
 
-    vDisplacement = cnoise(position + vec3(2.0 * u_time));
-  
-    vec3 newPosition = position + normal * (u_intensity * vDisplacement);
-  
+    float noise = pnoise(position + u_time, vec3(10.0));
+    
+    vec3 newPosition = position;
+    
+    if (u_shape == 0.0) {
+      // Sphere deformation
+      newPosition += normal * (noise * u_intensity);
+    } else if (u_shape == 1.0) {
+      // DNA-like deformation
+      float twist = position.y * 2.0 + u_time;
+      newPosition.x += sin(twist + noise) * u_intensity;
+      newPosition.z += cos(twist + noise) * u_intensity;
+    } else if (u_shape == 2.0) {
+      // Diamond deformation
+      newPosition += normal * (abs(noise) * u_intensity);
+    } else if (u_shape == 3.0) {
+      // Torus deformation
+      float angle = atan(position.x, position.z);
+      newPosition += normal * (sin(angle * 8.0 + u_time + noise) * u_intensity);
+    }
+    
     vec4 modelPosition = modelMatrix * vec4(newPosition, 1.0);
     vec4 viewPosition = viewMatrix * modelPosition;
     vec4 projectedPosition = projectionMatrix * viewPosition;
