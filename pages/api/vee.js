@@ -109,6 +109,30 @@ async function analyzeUserIntent(userQuery, contractABI, contractAddress) {
     return JSON.parse(response.choices[0].message.content);
 }
 
+// Helper function to get ABI from cache or fetch from contract
+const abiCache = new Map();
+
+const getContractABI = async (contractAddress) => {
+    if (abiCache.has(contractAddress)) {
+        return abiCache.get(contractAddress);
+    }
+
+    try {
+        // Fetch ABI from the explorer
+        const response = await fetch(`https://evm-testnet.flowscan.io/api/v2/smart-contracts/${contractAddress}`);
+        if (!response.ok) throw new Error('Failed to fetch ABI from explorer');
+        
+        const data = await response.json();
+        const abi = data.abi;
+        
+        abiCache.set(contractAddress, abi);
+        return abi;
+    } catch (error) {
+        console.error('Error getting ABI:', error);
+        throw new Error('Failed to get contract ABI from explorer');
+    }
+};
+
 export default async function handler(req, res) {
     const logs = [];
     const teamUpdates = [];
@@ -130,14 +154,9 @@ export default async function handler(req, res) {
             });
         }
 
-        // Fetch ABI
+        // Fetch ABI using the helper function
         try {
-            const response = await fetch(`https://evm-testnet.flowscan.io/api/v2/smart-contracts/${contractAddress}`);
-            if (!response.ok) throw new Error('Failed to fetch ABI');
-            
-            const data = await response.json();
-            const contractABI = data.abi;
-
+            const contractABI = await getContractABI(contractAddress);
             await saveABI(contractABI, contractAddress);
 
             teamUpdates.push(await generateTeamUpdate("abi_fetched", { 

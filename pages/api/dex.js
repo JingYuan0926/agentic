@@ -1,9 +1,5 @@
 import OpenAI from 'openai';
 import { ethers } from 'ethers';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { getABI } from '../../utils/abiHandler';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
@@ -35,15 +31,18 @@ const getContractABI = async (contractAddress) => {
     }
 
     try {
-        // Try to get ABI from the contract
-        const provider = new ethers.JsonRpcProvider(process.env.FLOW_RPC_URL);
-        const contract = new ethers.Contract(contractAddress, ['function deposit() payable', 'function withdraw(bytes32 _password, uint256 _amount)'], provider);
-        const abi = contract.interface.fragments;
+        // Fetch ABI from the explorer
+        const response = await fetch(`https://evm-testnet.flowscan.io/api/v2/smart-contracts/${contractAddress}`);
+        if (!response.ok) throw new Error('Failed to fetch ABI from explorer');
+        
+        const data = await response.json();
+        const abi = data.abi;
+        
         abiCache.set(contractAddress, abi);
         return abi;
     } catch (error) {
         console.error('Error getting ABI:', error);
-        throw new Error('Failed to get contract ABI');
+        throw new Error('Failed to get contract ABI from explorer');
     }
 };
 
