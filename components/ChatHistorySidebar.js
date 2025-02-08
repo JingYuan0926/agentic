@@ -162,26 +162,25 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
 
     const formatDate = (timestamp) => {
         const date = new Date(timestamp);
-        // Add 8 hours for UTC+8
-        date.setHours(date.getHours() + 8);
+        // Subtract 8 hours for UTC-8
+        date.setHours(date.getHours() );
         
         // Format date as dd/mm/yyyy
         const day = date.getDate().toString().padStart(2, '0');
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         const year = date.getFullYear();
         
-        // Format time as X:XXam (GMT+8) all in one line
+        // Format time as X:XXam/pm (GMT-8)
         let hours = date.getHours();
         const minutes = date.getMinutes().toString().padStart(2, '0');
-        const ampm = hours >= 12 ? 'am' : 'am';
-        hours = hours % 12;
-        hours = hours ? hours : 12;
+        const ampm = hours >= 12 ? 'pm' : 'am';
+        hours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
         
-        // Return all in one line with smaller font for GMT+8
+        // Return all in one line with smaller font for GMT-8
         return (
             <span className="whitespace-nowrap">
                 {`${day}/${month}/${year} ${hours}:${minutes}${ampm}`}
-                <span className="text-gray-400"> (GMT+8)</span>
+                <span className="text-gray-400"> (GMT-8)</span>
             </span>
         );
     };
