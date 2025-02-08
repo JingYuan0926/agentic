@@ -2,28 +2,55 @@ import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import { TrashIcon } from '@heroicons/react/24/outline';
 import {CircularProgress} from "@heroui/progress";
 import { useState, useEffect } from 'react';
+import { NilQLWrapper } from 'nillion-sv-wrappers';
 
 function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, selectedChatId }) {
     const { address, isConnected } = useWeb3ModalAccount();
     const [chats, setChats] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [nilQLWrapper, setNilQLWrapper] = useState(null);
+
+    // Initialize nilQL wrapper
+    useEffect(() => {
+        const initNilQL = async () => {
+            const cluster = {
+                nodes: [{}, {}, {}] // Three nodes for encryption
+            };
+            const wrapper = new NilQLWrapper(cluster);
+            await wrapper.init();
+            setNilQLWrapper(wrapper);
+        };
+        initNilQL();
+    }, []);
 
     // Load chat list when wallet connects
     useEffect(() => {
-        if (isConnected && address) {
+        if (isConnected && address && nilQLWrapper) {
             loadChats();
         } else {
             setChats([]);
         }
-    }, [isConnected, address, refreshTrigger]);
+    }, [isConnected, address, refreshTrigger, nilQLWrapper]);
 
     const truncateText = (text, maxLength = 20) => {
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength) + '...';
+        // Handle case where text is an object with $allot
+        if (typeof text === 'object' && text.$allot) {
+            // For encrypted content, just show a generic title
+            return "Encrypted message...";
+        }
+        
+        // Handle normal string text
+        if (typeof text === 'string') {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        // Fallback for any other case
+        return "New message";
     };
 
     const loadChats = async () => {
-        if (!address) return;
+        if (!address || !nilQLWrapper) return;
         setIsLoading(true);
         try {
             const response = await fetch('/api/nillion-test', {
@@ -31,61 +58,71 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'readAll',
-                    walletAddress: address // This ensures we only request user's own chats
+                    walletAddress: address
                 }),
             });
 
             if (!response.ok) throw new Error('Failed to load chats');
             const data = await response.json();
             
-            // Filter chats to only show ones belonging to the current wallet
-            const userChats = data.filter(msg => msg.walletAddress === address);
-            
-            // Group messages by chatId and combine their messages
-            const chatGroups = userChats.reduce((acc, msg) => {
-                const chatId = msg.chatId;
-                
-                try {
-                    const messageData = JSON.parse(msg.message);
-                    
-                    if (!acc[chatId]) {
-                        // Initialize new chat group
-                        acc[chatId] = {
-                            id: chatId,
-                            messages: [],
-                            timestamp: msg.timestamp,
-                            title: '',
-                            walletAddress: msg.walletAddress // Store wallet address for verification
-                        };
-                    }
-
-                    // Add messages to the group
-                    if (messageData.messages) {
-                        acc[chatId].messages = [...acc[chatId].messages, ...messageData.messages];
-                        // Update title from the first user message if not set
-                        if (!acc[chatId].title) {
-                            const firstUserMessage = messageData.messages.find(m => m.role === 'user');
-                            if (firstUserMessage) {
-                                acc[chatId].title = truncateText(firstUserMessage.content);
-                            }
-                        }
-                    }
-
-                    // Keep the latest timestamp
-                    if (new Date(msg.timestamp) > new Date(acc[chatId].timestamp)) {
-                        acc[chatId].timestamp = msg.timestamp;
-                    }
-                } catch (e) {
-                    console.error('Failed to parse message:', e);
+            // Group messages by chatId first
+            const chatGroups = data.reduce((acc, msg) => {
+                if (!acc[msg.chatId]) {
+                    acc[msg.chatId] = [];
                 }
-                
+                acc[msg.chatId].push(msg);
                 return acc;
             }, {});
 
-            // Sort chats by timestamp (newest first)
-            const sortedChats = Object.values(chatGroups)
-                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                .filter(chat => chat.title && chat.walletAddress === address); // Only show user's chats with titles
+            // Process each chat group
+            const userChats = await Promise.all(
+                Object.entries(chatGroups).map(async ([chatId, messages]) => {
+                    try {
+                        // Sort messages by timestamp and get the latest
+                        const sortedMessages = messages.sort((a, b) => 
+                            new Date(b.timestamp) - new Date(a.timestamp)
+                        );
+                        const latestMessage = sortedMessages[0];
+                        
+                        if (!latestMessage) return null;
+
+                        const messageData = JSON.parse(latestMessage.message);
+                        const decryptedMessages = await Promise.all(
+                            messageData.messages.map(async (chatMsg) => {
+                                if (chatMsg.content && typeof chatMsg.content === 'object' && chatMsg.content.$allot) {
+                                    try {
+                                        const decryptedContent = await nilQLWrapper.decrypt(chatMsg.content.$allot);
+                                        return { ...chatMsg, content: decryptedContent };
+                                    } catch (e) {
+                                        console.error('Failed to decrypt message:', e);
+                                        return { ...chatMsg, content: 'Encrypted message' };
+                                    }
+                                }
+                                return chatMsg;
+                            })
+                        );
+
+                        // Find first user message for title
+                        const firstUserMessage = decryptedMessages.find(m => m.role === 'user');
+                        
+                        return {
+                            id: chatId,
+                            messages: decryptedMessages,
+                            timestamp: latestMessage.timestamp,
+                            walletAddress: latestMessage.walletAddress,
+                            title: messageData.title || truncateText(firstUserMessage?.content) || 'New Chat'
+                        };
+                    } catch (e) {
+                        console.error('Failed to process chat:', e);
+                        return null;
+                    }
+                })
+            );
+
+            // Filter out any failed parses and sort by timestamp
+            const sortedChats = userChats
+                .filter(Boolean)
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
             setChats(sortedChats);
         } catch (error) {
@@ -149,6 +186,24 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
         );
     };
 
+    const renderChatTitle = (chat) => {
+        try {
+            // Only show actual content if it's the owner's chat
+            if (chat.walletAddress !== address) {
+                return "Encrypted Chat";
+            }
+
+            // Safely parse the message
+            if (!chat.title) return "New Chat";
+            
+            // If we have a title, use it
+            return chat.title;
+        } catch (e) {
+            console.error('Failed to parse chat title:', e);
+            return "Chat";
+        }
+    };
+
     return (
         <div className={`w-64 border-r dark:border-gray-700 ${!isConnected ? 'opacity-50' : ''} flex flex-col h-full`}>
             <div className="p-4 flex-1">
@@ -158,7 +213,6 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                     </h2>
                     <button
                         onClick={() => {
-                            // Force clear current chat
                             onChatSelect({ id: null });
                         }}
                         disabled={!isConnected}
@@ -193,11 +247,15 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                                          transition-colors rounded cursor-pointer"
                             >
                                 <div 
-                                    onClick={() => onChatSelect(chat)}
-                                    className="p-2 pr-10" // Added right padding for delete button
+                                    onClick={() => onChatSelect({
+                                        id: chat.id,
+                                        messages: chat.messages,
+                                        walletAddress: chat.walletAddress
+                                    })}
+                                    className="p-2 pr-10"
                                 >
                                     <div className="font-medium text-black dark:text-white truncate">
-                                        {chat.title}
+                                        {renderChatTitle(chat)}
                                     </div>
                                     <div 
                                         className="text-sm text-gray-500"

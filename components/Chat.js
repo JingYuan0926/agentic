@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import dynamic from 'next/dynamic';
+import { NilQLWrapper } from 'nillion-sv-wrappers';
 
 // Disable SSR for the Chat component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -16,22 +17,32 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
     const [isSaving, setIsSaving] = useState(false);
     const [chatId, setChatId] = useState(null);
     const messagesEndRef = useRef(null);
+    const [nilQLWrapper, setNilQLWrapper] = useState(null);
 
-    // Reset component when selectedChatId changes
+    // Load selected chat
     useEffect(() => {
         if (selectedChatId) {
-            loadSavedChat(selectedChatId);
+            setMessages(selectedChatId.messages || []);
+            setChatId(selectedChatId.id);
         } else {
-            // Reset all states for new chat
             setMessages([]);
             setChatId(null);
             setInput('');
-            setIsLoading(false);
-            setIsSaving(false);
-            // Force scroll to bottom after reset
-            scrollToBottom();
         }
     }, [selectedChatId]);
+
+    // Initialize nilQL wrapper
+    useEffect(() => {
+        const initNilQL = async () => {
+            const cluster = {
+                nodes: [{}, {}, {}] // Three nodes for encryption
+            };
+            const wrapper = new NilQLWrapper(cluster);
+            await wrapper.init();
+            setNilQLWrapper(wrapper);
+        };
+        initNilQL();
+    }, []);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -96,7 +107,6 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
             let currentChatId = forcedChatId || chatId;
             let existingData = null;
 
-            // If we have a chatId, try to get existing record
             if (currentChatId) {
                 const fetchResponse = await fetch('/api/nillion-test', {
                     method: 'POST',
@@ -113,7 +123,16 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
                 }
             }
 
-            // If we found existing data, append to it
+            // Encrypt the message content
+            const encryptedContent = message.content;
+            if (nilQLWrapper) {
+                const shares = await nilQLWrapper.encrypt(message.content);
+                message = {
+                    ...message,
+                    content: { $allot: shares } // Store encrypted shares
+                };
+            }
+
             let conversation;
             if (existingData && existingData.message) {
                 const existingConversation = JSON.parse(existingData.message);
@@ -122,14 +141,12 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
                     messages: [...existingConversation.messages, message]
                 };
             } else {
-                // Create new conversation
                 conversation = {
                     messages: [message],
-                    title: message.content.substring(0, 30) + '...'
+                    title: encryptedContent.substring(0, 30) + '...' // Keep title in plaintext
                 };
             }
 
-            // Store the updated/new conversation
             const response = await fetch('/api/nillion-test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -144,7 +161,6 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
             if (!response.ok) throw new Error('Failed to store message');
             const result = await response.json();
             
-            // Set chatId for new conversations
             if (!currentChatId && result.chatId) {
                 currentChatId = result.chatId;
                 setChatId(currentChatId);
@@ -157,35 +173,65 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
         }
     };
 
-    const loadSavedChat = async (savedChatId) => {
+    const loadSavedChat = async (chatData) => {
         try {
-            const response = await fetch('/api/nillion-test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'read',
-                    walletAddress: address,
-                    chatId: savedChatId
-                }),
-            });
+            if (!nilQLWrapper) {
+                console.error('Encryption wrapper not initialized');
+                return;
+            }
 
-            if (!response.ok) throw new Error('Failed to load chat');
-            const data = await response.json();
-            
-            if (data) {
-                try {
-                    // Parse the stored conversation JSON
-                    const conversation = JSON.parse(data.message);
-                    setMessages(conversation.messages);
-                    setChatId(savedChatId);
-                } catch (e) {
-                    console.error('Failed to parse conversation:', e);
-                    alert('Failed to load chat: Invalid format');
+            if (!chatData || !chatData.message) {
+                throw new Error('No chat data found');
+            }
+
+            try {
+                const conversation = JSON.parse(chatData.message);
+                
+                // Check if this chat belongs to the current wallet
+                if (chatData.walletAddress !== address) {
+                    throw new Error('Unauthorized: Cannot decrypt messages from other wallets');
                 }
+
+                // Decrypt messages only if we're the owner
+                const decryptedMessages = await Promise.all(
+                    conversation.messages.map(async (msg) => {
+                        if (msg && msg.content && typeof msg.content === 'object' && msg.content.$allot) {
+                            try {
+                                const decryptedContent = await nilQLWrapper.decrypt(msg.content.$allot);
+                                return {
+                                    ...msg,
+                                    content: decryptedContent
+                                };
+                            } catch (e) {
+                                console.error('Failed to decrypt message:', e);
+                                return {
+                                    ...msg,
+                                    content: 'Encrypted message (cannot decrypt)',
+                                    isEncrypted: true
+                                };
+                            }
+                        }
+                        return msg;
+                    })
+                );
+
+                setMessages(decryptedMessages);
+                setChatId(chatData.id);
+            } catch (e) {
+                console.error('Failed to load chat:', e);
+                setMessages([{
+                    role: 'system',
+                    content: 'Cannot access this chat: ' + e.message,
+                    isError: true
+                }]);
             }
         } catch (error) {
             console.error('Failed to load chat:', error);
-            alert('Failed to load chat: ' + error.message);
+            setMessages([{
+                role: 'system',
+                content: 'Failed to load chat: ' + error.message,
+                isError: true
+            }]);
         }
     };
 

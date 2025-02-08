@@ -16,7 +16,8 @@
         "type": "string"
       },
       "message": {
-        "type": "string"
+        "type": "string",
+        "description": "JSON string containing encrypted messages with format: { messages: [{ role: string, content: { $allot: string[] } }], title: string }"
       },
       "timestamp": {
         "type": "string",
