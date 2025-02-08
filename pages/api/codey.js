@@ -92,8 +92,20 @@ export default async function handler(req, res) {
                     CRITICAL RULES:
                     1. Start with // SPDX-License-Identifier: MIT
                     2. Use pragma solidity ^0.8.20;
-                    3. Name the contract EXACTLY "Contract" - this is mandatory
+                    3. Name the contract EXACTLY "Contract"
                     4. Include NatSpec comments
+                    5. For password protection:
+                    - Create a function to set initial password hash (onlyOwner)
+                    - Use bytes32 private passwordHash for storage
+                    - Include a function to verify password by hashing input
+                    - Use keccak256 for hashing
+                    - NEVER store or expose raw passwords
+                    6. Output ONLY valid Solidity code without markdown backticks
+                    7. DO NOT use OpenZeppelin or external libraries
+                    8. Include proper error handling and events
+                    9. Use payable for functions that involve transactions
+                    10. Make contract fully functional and deployable
+                    11. NEVER include passwords or their computation in comments or code
                     5. Optimize for Flow EVM chain
                     6. Output ONLY valid Solidity code
                     7. No explanations or markdown
@@ -101,11 +113,17 @@ export default async function handler(req, res) {
                     9. Include gas optimizations
                     10. Add appropriate events
                     11. Include proper error handling
-                    12. Add input validation`
+                    12. Add input validation
+                    13. Make sure the contract is fully functional and can be deployed without ANY changes
+                    14. Make sure the contract is optimized for the Flow EVM chain
+                    15. Make sure the contract is secure and cannot be exploited
+                    16. Make sure the contract is easy to understand and use
+                    17. Make sure the contract is easy to deploy and test
+                    18. Use payable for functions that involve transactions`
                 },
                 {
-                    role: 'user',
-                    content: req.body.message || 'Generate a smart contract' // Ensure content is never null
+                    role: "user",
+                    content: req.body.message || 'Generate a smart contract'
                 }
             ],
             temperature: 0.7,
@@ -114,6 +132,10 @@ export default async function handler(req, res) {
 
         let contractCode = response.choices[0].message.content.trim();
         
+        // Remove markdown code block indicators if present
+        contractCode = contractCode.replace(/```solidity\n/g, '');
+        contractCode = contractCode.replace(/```\n?/g, '');
+
         if (!contractCode.includes('contract Contract')) {
             throw new Error('Invalid contract name. Must be named "Contract"');
         }
