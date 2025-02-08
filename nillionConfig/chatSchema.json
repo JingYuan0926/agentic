@@ -12,26 +12,8 @@
       "walletAddress": {
         "type": "string"
       },
-      "chatId": {
-        "type": "string",
-        "format": "uuid",
-        "coerce": true
-      },
-      "title": {
+      "message": {
         "type": "string"
-      },
-      "role": {
-        "type": "string",
-        "enum": ["user", "assistant", "system"]
-      },
-      "content": {
-        "type": "object",
-        "properties": {
-          "$allot": {
-            "type": "string"
-          }
-        },
-        "required": ["$allot"]
       },
       "timestamp": {
         "type": "string",
@@ -39,7 +21,7 @@
         "coerce": true
       }
     },
-    "required": ["_id", "walletAddress", "chatId", "role", "content", "timestamp"],
+    "required": ["_id", "walletAddress", "message", "timestamp"],
     "additionalProperties": false
   }
 } 

@@ -1,8 +1,8 @@
 {
   "orgConfig": {
     "orgCredentials": {
-      "secretKey": "ad462103b2b9f81101a907005a8aa9ec1ff319b05d200dea2dd20e9dac5537ca",
-      "orgDid": "did:nil:testnet:nillion1mxquknh937j3gz0kl8sdkwy33krml5f5ya7fdw"
+      "secretKey": "3139dcc6805adf6683bfca731b7d88209f39b7abbd8205985ff4f309f8c677de",
+      "orgDid": "did:nil:testnet:nillion1st2g2uad97ecvztghv9zte7jsw4w5k9l4wkwjv"
     },
     "nodes": [
       {
