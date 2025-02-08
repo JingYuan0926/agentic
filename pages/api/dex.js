@@ -126,16 +126,25 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
         // Create function call instance
         const functionCall = new FunctionCall(functionInfo.name);
         
-        // Extract parameters using GPT
+        // Handle functions with no inputs
+        if (!functionInfo.inputs || functionInfo.inputs.length === 0) {
+            return {
+                success: true,
+                functionCall: functionCall.toJSON(),
+                params: {}  // Empty params for functions with no inputs
+            };
+        }
+
+        // For functions with inputs, extract parameters using GPT
         const analysis = await openai.chat.completions.create({
             model: "gpt-4o-mini",
             messages: [
                 {
                     role: "system",
                     content: `Extract parameters for ${functionInfo.name} function.
-                    Function type: ${functionInfo.stateMutability}
-                    Return ONLY the numeric amount in JSON format.
-                    For example: {"amount": "30"}`
+                    Function inputs: ${JSON.stringify(functionInfo.inputs)}
+                    Return parameters in JSON format matching the input types.
+                    For payable functions, include "amount" parameter.`
                 },
                 {
                     role: "user",
@@ -147,20 +156,22 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
 
         const extractedValues = JSON.parse(analysis.choices[0].message.content);
         
-        // Add parameters based on function type
-        if (functionInfo.stateMutability === 'payable' || functionInfo.name === 'withdraw') {
-            functionCall.addParameter('uint256', 'amount', extractedValues.amount);
+        // Add parameters based on function type and inputs
+        if (functionInfo.stateMutability === 'payable') {
+            functionCall.addParameter('uint256', 'amount', extractedValues.amount || '0');
+        } else {
+            // Add other parameters based on function inputs
+            functionInfo.inputs.forEach(input => {
+                if (extractedValues[input.name]) {
+                    functionCall.addParameter(input.type, input.name, extractedValues[input.name]);
+                }
+            });
         }
-
-        // Log the extracted function call
-        console.log('Extracted function call:', functionCall.toJSON());
 
         return {
             success: true,
             functionCall: functionCall.toJSON(),
-            params: {
-                amount: extractedValues.amount
-            }
+            params: Object.fromEntries(functionCall.params)
         };
     } catch (error) {
         console.error('Parameter extraction error:', error);
@@ -177,7 +188,8 @@ async function extractAndExecuteFunction(userQuery, functionInfo) {
         console.log('Processing function:', {
             name: functionInfo.name,
             userQuery,
-            stateMutability: functionInfo.stateMutability
+            stateMutability: functionInfo.stateMutability,
+            inputs: functionInfo.inputs
         });
 
         const paramData = await extractAndValidateParameters(userQuery, functionInfo);
@@ -189,11 +201,17 @@ async function extractAndExecuteFunction(userQuery, functionInfo) {
             };
         }
 
+        // Create message based on function type
+        let executionMessage = `Ready to execute ${functionInfo.name}`;
+        if (Object.keys(paramData.params).length > 0) {
+            executionMessage += ` with parameters: ${JSON.stringify(paramData.params)}`;
+        }
+
         return {
             success: true,
             functionCall: paramData.functionCall,
             params: paramData.params,
-            message: `Ready to execute ${functionInfo.name} with amount: ${paramData.params.amount} FLOW`
+            message: executionMessage
         };
     } catch (error) {
         console.error('Function execution error:', error);

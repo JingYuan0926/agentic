@@ -231,11 +231,6 @@ export default function Chat() {
                         const receipt = await contract.deploymentTransaction().wait(2);
                         addMessage('assistant', `Contract deployed to: ${address}`, 'Codey');
 
-                        // Set contract as connected
-                        setConnectedContract(address);
-                        setIsContractConnected(true);
-                        addTeamUpdate('System', `Connected to contract ${address}`);
-
                         // Wait before verification
                         await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -252,6 +247,7 @@ export default function Chat() {
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
                             addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
+                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${address}`, 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
