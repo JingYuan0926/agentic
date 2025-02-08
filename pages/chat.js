@@ -403,7 +403,6 @@ export default function Chat() {
                 contractAddress: connectedContract
             });
 
-            // Create minimal ABI array with just the function we need
             const minimalABI = [{
                 name: functionInfo.name,
                 type: 'function',
@@ -414,17 +413,18 @@ export default function Chat() {
 
             const contract = new ethers.Contract(connectedContract, minimalABI, signer);
 
-            // Handle payable functions
-            let txOptions = {};
-            
-            // For payable functions, use the value parameter
-            if (functionInfo.stateMutability === 'payable' && params.value) {
-                txOptions = { value: params.value };
-                console.log('Payable transaction:', { value: params.value, formatted: ethers.formatEther(params.value) });
+            let tx;
+            if (functionInfo.stateMutability === 'payable') {
+                // For payable functions, use the value in txOptions
+                const txOptions = { value: params.value };
+                tx = await contract[functionInfo.name](txOptions);
+            } else if (Array.isArray(params)) {
+                // For functions with parameters, spread the array
+                tx = await contract[functionInfo.name](...params);
+            } else {
+                // For functions without parameters
+                tx = await contract[functionInfo.name]();
             }
-
-            // Execute the function
-            const tx = await contract[functionInfo.name](txOptions);
 
             addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
             
@@ -438,7 +438,6 @@ export default function Chat() {
 
         } catch (error) {
             console.error('Contract execution error:', error);
-            // Extract revert reason if available
             const reason = error.reason || error.message;
             return {
                 success: false,
