@@ -1,5 +1,6 @@
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import { TrashIcon } from '@heroicons/react/24/outline';
+import {CircularProgress} from "@heroui/progress";
 import { useState, useEffect } from 'react';
 
 function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
@@ -15,6 +16,11 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
             setChats([]);
         }
     }, [isConnected, address, refreshTrigger]);
+
+    const truncateText = (text, maxLength = 20) => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    };
 
     const loadChats = async () => {
         if (!address) return;
@@ -32,20 +38,18 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
             if (!response.ok) throw new Error('Failed to load chats');
             const data = await response.json();
             
-            // Group messages by chatId and get first user message as title
             const chatGroups = data.reduce((acc, msg) => {
                 const chatId = msg.chatId;
                 if (!acc[chatId]) {
                     try {
                         const conversation = JSON.parse(msg.message);
-                        // Find first user message
                         const firstUserMessage = conversation.messages.find(m => m.role === 'user');
                         acc[chatId] = {
                             id: chatId,
-                            title: firstUserMessage ? firstUserMessage.content : 'New Chat',
+                            title: firstUserMessage ? truncateText(firstUserMessage.content) : 'New Chat',
                             timestamp: msg.timestamp,
                             messageId: msg._id,
-                            fullMessage: msg.message // Store full conversation for loading later
+                            fullMessage: msg.message
                         };
                     } catch (e) {
                         console.error('Failed to parse message:', e);
@@ -88,12 +92,34 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
     };
 
     const formatDate = (timestamp) => {
-        return new Date(timestamp).toLocaleDateString();
+        const date = new Date(timestamp);
+        // Add 8 hours for UTC+8
+        date.setHours(date.getHours() + 8);
+        
+        // Format date as dd/mm/yyyy
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        
+        // Format time as X:XXam (GMT+8) all in one line
+        let hours = date.getHours();
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'am' : 'am';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        
+        // Return all in one line with smaller font for GMT+8
+        return (
+            <span className="whitespace-nowrap">
+                {`${day}/${month}/${year} ${hours}:${minutes}${ampm}`}
+                <span className="text-gray-400"> (GMT+8)</span>
+            </span>
+        );
     };
 
     return (
-        <div className={`w-64 border-r dark:border-gray-700 overflow-y-auto ${!isConnected ? 'opacity-50' : ''}`}>
-            <div className="p-4">
+        <div className={`w-64 border-r dark:border-gray-700 ${!isConnected ? 'opacity-50' : ''} flex flex-col h-full`}>
+            <div className="p-4 flex-1">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-lg font-semibold text-black dark:text-white">
                         Chat History
@@ -108,9 +134,14 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                         New Chat
                     </button>
                 </div>
+
                 {isLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <div className="flex items-center justify-center h-[calc(100%-60px)]">
+                        <CircularProgress 
+                            aria-label="Loading chats..." 
+                            color="primary"
+                            className="w-10 h-10"
+                        />
                     </div>
                 ) : !chats || chats.length === 0 ? (
                     <div className="text-center py-4 text-gray-500 dark:text-gray-400">
@@ -119,18 +150,18 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                         Start a new conversation!
                     </div>
                 ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-0.5 overflow-y-auto max-h-[calc(100vh-200px)]">
                         {chats.map((chat) => (
                             <div
                                 key={`chat-${chat.id}`}
-                                className="flex items-center group"
+                                className="group relative hover:bg-gray-100 dark:hover:bg-gray-700 
+                                         transition-colors rounded cursor-pointer"
                             >
-                                <button
+                                <div 
                                     onClick={() => onChatSelect(chat)}
-                                    disabled={!isConnected}
-                                    className="flex-1 text-left p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:cursor-not-allowed"
+                                    className="p-2 pr-10" // Added right padding for delete button
                                 >
-                                    <div className="font-medium truncate text-black dark:text-white">
+                                    <div className="font-medium text-black dark:text-white truncate">
                                         {chat.title}
                                     </div>
                                     <div 
@@ -139,10 +170,15 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                                     >
                                         {formatDate(chat.timestamp)}
                                     </div>
-                                </button>
+                                </div>
                                 <button
-                                    onClick={(e) => handleDelete(e, chat.id, chat.messageId)}
-                                    className="p-2 text-red-500 hover:text-red-700 transition-colors opacity-0 group-hover:opacity-100"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(e, chat.id, chat.messageId);
+                                    }}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2
+                                             text-red-500 hover:text-red-700 
+                                             opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="Delete chat"
                                     disabled={!isConnected}
                                 >
@@ -157,4 +193,4 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
     );
 }
 
-export default ChatHistorySidebar; 
+export default ChatHistorySidebar;
