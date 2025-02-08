@@ -4,7 +4,7 @@ import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import nillionService from '../services/nillionService.js';
 
 function Chat({ selectedChatId, onNewChat }) {
-    const { address } = useWeb3ModalAccount();
+    const { address, isConnected } = useWeb3ModalAccount();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +35,7 @@ function Chat({ selectedChatId, onNewChat }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim() || !address) return;
+        if (!input.trim() || !address || !isConnected) return;
 
         setIsLoading(true);
         try {
@@ -85,25 +85,38 @@ function Chat({ selectedChatId, onNewChat }) {
             <div className="flex flex-col h-[calc(100vh-73px)] w-full max-w-3xl">
                 {/* Chat messages area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {messages.map((message, index) => (
-                        <div 
-                            key={index} 
-                            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                            <div 
-                                className={`max-w-[80%] p-3 rounded-lg whitespace-pre-wrap ${
-                                    message.role === 'user' 
-                                        ? 'bg-blue-500 text-white'
-                                        : message.role === 'system'
-                                        ? 'bg-gray-500 text-white'
-                                        : 'bg-gray-200 dark:bg-gray-700 dark:text-white'
-                                }`}
-                            >
-                                {message.content}
+                    {!isConnected ? (
+                        <div className="flex justify-center items-center h-full">
+                            <div className="text-center p-8 rounded-lg">
+                                <h2 className="text-xl font-semibold mb-4">Connect Wallet to Chat</h2>
+                                <p className="text-gray-600 dark:text-gray-400">
+                                    Please connect your wallet to start chatting with AI
+                                </p>
                             </div>
                         </div>
-                    ))}
-                    <div ref={messagesEndRef} />
+                    ) : (
+                        <>
+                            {messages.map((message, index) => (
+                                <div 
+                                    key={index} 
+                                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    <div 
+                                        className={`max-w-[80%] p-3 rounded-lg whitespace-pre-wrap ${
+                                            message.role === 'user' 
+                                                ? 'bg-blue-500 text-white'
+                                                : message.role === 'system'
+                                                ? 'bg-gray-500 text-white'
+                                                : 'bg-gray-200 dark:bg-gray-700 dark:text-white'
+                                        }`}
+                                    >
+                                        {message.content}
+                                    </div>
+                                </div>
+                            ))}
+                            <div ref={messagesEndRef} />
+                        </>
+                    )}
                 </div>
 
                 {/* Input area */}
@@ -113,13 +126,13 @@ function Chat({ selectedChatId, onNewChat }) {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Type your message..."
-                            disabled={isLoading}
+                            placeholder={isConnected ? "Type your message..." : "Connect wallet to chat"}
+                            disabled={isLoading || !isConnected}
                             className="flex-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         />
                         <button
                             type="submit"
-                            disabled={isLoading}
+                            disabled={isLoading || !isConnected}
                             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         >
                             {isLoading ? 'Sending...' : 'Send'}

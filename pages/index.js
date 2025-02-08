@@ -7,20 +7,20 @@ import Header from '../components/Header';
 import nillionService from '../services/nillionService.js';
 
 export default function Home() {
-  const { address } = useWeb3ModalAccount();
+  const { address, isConnected } = useWeb3ModalAccount();
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [chats, setChats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Load chat list when wallet connects
   useEffect(() => {
-    if (address) {
+    if (isConnected && address) {
       loadChats();
     } else {
       setChats([]);
       setSelectedChatId(null);
     }
-  }, [address]);
+  }, [isConnected, address]);
 
   const loadChats = async () => {
     if (!address) return;
@@ -64,6 +64,7 @@ export default function Home() {
           isLoading={isLoading}
           onChatSelect={handleChatSelect}
           onChatDelete={handleChatDelete}
+          disabled={!isConnected}
         />
         <div className="flex-1">
           <Chat 
