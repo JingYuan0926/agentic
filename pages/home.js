@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import Blob from '@/components/Blob';
+import '../styles/globals.css';
+
 
 export default function Home() {
   const [inputText, setInputText] = useState('');
@@ -99,71 +101,35 @@ export default function Home() {
           </Canvas>
         </div>
 
-        <div style={{ 
-          padding: '20px',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          borderRadius: '8px',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
-          flex: 1,
-          overflowY: 'auto',
-          fontSize: '16px'
-        }}>
-          {chatLog.map((entry, index) => (
-            <div key={index} style={{ 
-              marginBottom: '12px',
-              fontFamily: 'monospace',
-              lineHeight: '1.5'
-            }}>
-              <span style={{ 
-                fontWeight: 'bold',
-                color: entry.agent === 'ERROR' ? '#ff4444' : 
-                       entry.agent === 'DONE' ? '#44ff44' : '#0088ff',
-                fontSize: '18px'
-              }}>
-                [{entry.agent}]:
-              </span>{' '}
-              <span style={{ whiteSpace: 'pre-wrap' }}>{entry.message}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ 
-          padding: '20px',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          borderRadius: '8px',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
-        }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Describe the smart contract you need..."
-              style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #ddd',
-                fontSize: '16px'
-              }}
-            />
-            <button
-              type="submit"
-              style={{
-                padding: '12px 24px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: '#007bff',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-            >
-              Generate
-            </button>
-          </form>
-        </div>
+        <div className="flex-auto overflow-y-auto bg-white rounded-lg shadow p-5 space-y-4">
+        {chatLog.map((entry, index) => (
+          <div key={index} className="bg-gray-100 p-3 rounded shadow-sm">
+            <span className={`font-bold text-${entry.agent === 'ERROR' ? 'red-500' : entry.agent === 'DONE' ? 'green-500' : 'blue-500'} text-lg`}>
+              [{entry.agent}]:
+            </span>{' '}
+            <span className="whitespace-pre-wrap">{entry.message}</span>
+          </div>
+        ))}
       </div>
+
+      <div className="bg-white rounded-lg shadow p-5">
+        <form onSubmit={handleSubmit} className="flex gap-3">
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="Describe the smart contract you need..."
+            className="flex-1 p-3 border border-gray-300 rounded"
+          />
+          <button
+            type="submit"
+            className="bg-blue-500 text-white p-3 rounded hover:bg-blue-600"
+          >
+            Generate
+          </button>
+        </form>
+      </div>
+    </div>
     </div>
   );
 }
