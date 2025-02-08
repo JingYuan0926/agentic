@@ -1,96 +1,121 @@
 import { ethers } from 'ethers';
-import ollama from 'ollama';
+import { readFileSync } from 'fs';
 import 'dotenv/config';
 
 if (!process.env.OPERATOR_PRIVATE_KEY) {
   throw new Error('OPERATOR_PRIVATE_KEY not found in environment variables');
 }
 
+// Load AI keys for verification
+const aiKeys = JSON.parse(readFileSync('ai_keys.json', 'utf8'));
+const AI_PUBLIC_ADDRESS = aiKeys.address;
+
+// ABI matching MyServiceManager.sol exactly
 const abi = [
-  'function respondToTask((string contents, uint32 taskCreatedBlock) task, uint32 referenceTaskIndex, string response, bytes memory signature) external',
-  'event NewTaskCreated(uint32 indexed taskIndex, (string contents, uint32 taskCreatedBlock) task)'
+  'function operatorRegistered(address) external view returns (bool)',
+  'function aiPublicKey() external view returns (address)',
+  'function respondToTask(tuple(bytes32 hashBeforeSign, bytes signature) task, uint32 referenceTaskIndex, string response, bytes signature) external',
+  'event NewTaskCreated(uint32 indexed taskIndex, tuple(bytes32 hashBeforeSign, bytes signature) task)',
+  'event TaskResponded(uint32 indexed taskIndex, tuple(bytes32 hashBeforeSign, bytes signature) task, string response, address operator)'
 ];
 
-async function createSignature(wallet, response, contents) {
-  // Match the contract's signature creation
-  const messageHash = ethers.solidityPackedKeccak256(
-    ['string', 'string'],
-    [response, contents]
-  );
-  const signature = await wallet.signMessage(ethers.getBytes(messageHash));
-  return signature;
+// Function to verify AI signature
+async function verifyAISignature(hashBeforeSign, signature, contract) {
+  try {
+    // Get AI public key from contract
+    const aiPublicKey = await contract.aiPublicKey();
+    
+    // Recover the signer's address from the signature
+    const recoveredAddress = ethers.verifyMessage(
+      ethers.getBytes(hashBeforeSign),
+      signature
+    );
+    
+    // Compare with the AI public key from the contract
+    const isValid = recoveredAddress.toLowerCase() === aiPublicKey.toLowerCase();
+    
+    console.log('🔍 Signature Verification:');
+    console.log('- Hash before sign:', hashBeforeSign);
+    console.log('- Signature:', signature);
+    console.log('- Recovered signer:', recoveredAddress);
+    console.log('- Contract AI address:', aiPublicKey);
+    console.log('- Is valid:', isValid);
+    
+    return isValid;
+  } catch (error) {
+    console.error('❌ Signature verification failed:', error);
+    return false;
+  }
 }
 
 async function main() {
-  const contractAddress = '0xDe1e04366D466bd9605447c9536fc0c907DCfB55';
+  const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
   
   // Use WebSocket provider for reliable event listening
   const provider = new ethers.WebSocketProvider('wss://ethereum-holesky.publicnode.com');
   const wallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY, provider);
   const contract = new ethers.Contract(contractAddress, abi, wallet);
 
-  console.log('🚀 Starting operator service...');
-  console.log('Waiting for tasks to analyze with DeepSeek LLM...');
-
-  // First test LLM connection
-  try {
-    console.log('Testing LLM connection...');
-    const testResponse = await ollama.chat({
-      model: 'deepseek-r1:1.5b',
-      messages: [{ role: 'user', content: 'test' }]
-    });
-    console.log('✅ LLM is working');
-  } catch (error) {
-    console.error('❌ LLM test failed:', error);
+  // Check operator registration
+  const isRegistered = await contract.operatorRegistered(wallet.address);
+  console.log('Checking operator registration for:', wallet.address);
+  if (!isRegistered) {
+    console.error('❌ Operator not registered. Please register first.');
     process.exit(1);
   }
-  
+  console.log('✅ Operator registered and authorized');
+
+  console.log('🚀 Starting operator service...');
+  console.log('Waiting for tasks to verify...');
+
   // Listen for new tasks
   contract.on('NewTaskCreated', async (taskIndex, task) => {
     console.log('\n📥 New task received:', {
       index: taskIndex,
-      text: task.contents
+      hashBeforeSign: task.hashBeforeSign
     });
 
     try {
-      console.log('🤖 Asking DeepSeek to analyze:', task.contents);
-      const response = await ollama.chat({
-        model: 'deepseek-r1:1.5b',
-        messages: [{ role: 'user', content: task.contents }]
-      });
+      // Verify AI signature using contract's public key
+      const isVerified = await verifyAISignature(task.hashBeforeSign, task.signature, contract);
 
-      const finalResponse = response.message.content.split('</think>')[1]?.trim() || response.message.content;
-      console.log('✨ DeepSeek response:', finalResponse);
-      
-      console.log('📤 Submitting response to blockchain...');
-      const signature = await createSignature(wallet, finalResponse, task.contents);
+      // Create operator's signature of the verification result
+      const messageHash = ethers.keccak256(
+        ethers.solidityPacked(
+          ['bool', 'bytes32'],
+          [isVerified, task.hashBeforeSign]
+        )
+      );
+      const operatorSignature = await wallet.signMessage(ethers.getBytes(messageHash));
 
-      // Create task struct exactly as contract expects
-      const taskStruct = {
-        contents: task.contents,
-        taskCreatedBlock: task.taskCreatedBlock
-      };
-
-      console.log('Sending task:', {
-        task: taskStruct,
-        taskIndex: Number(taskIndex),
-        response: finalResponse,
-        signature
-      });
+      console.log('📤 Submitting verification:');
+      console.log('- Task index:', taskIndex);
+      console.log('- Verification result:', isVerified);
 
       const tx = await contract.respondToTask(
-        taskStruct,
+        {
+          hashBeforeSign: task.hashBeforeSign,
+          signature: task.signature
+        },
         taskIndex,
-        finalResponse,
-        signature
+        isVerified ? "Verified" : "Not Verified",
+        operatorSignature,
+        {
+          gasLimit: 500000
+        }
       );
 
       console.log('⏳ Waiting for confirmation...');
       const receipt = await tx.wait();
-      console.log('✅ Response submitted! Transaction:', tx.hash);
+      console.log('✅ Verification submitted! Transaction:', tx.hash);
     } catch (error) {
       console.error('❌ Error processing task:', error);
-      console.error('Error details:', error.error || error);
+      if (error.data) {
+        console.error('Error data:', error.data);
+      }
+      if (error.transaction) {
+        console.error('Transaction data:', error.transaction.data);
+      }
     }
   });
 

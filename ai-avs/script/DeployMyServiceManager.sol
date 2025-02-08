@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
 import {Script} from "forge-std/Script.sol";
@@ -15,6 +15,10 @@ contract DeployMyServiceManager is Script {
     address internal constant DELEGATION_MANAGER =
         0xA44151489861Fe9e3055d95adC98FbD462B948e7;
 
+    // Add AI public key constant - this should match the one in ai_keys.json
+    address internal constant AI_PUBLIC_KEY = 
+        0xcb5E14f6CF2EC3214830D0f149762104C6890FD0;
+
     address internal deployer;
     address internal operator;
     MyServiceManager serviceManager;
@@ -28,9 +32,9 @@ contract DeployMyServiceManager is Script {
     }
 
     function run() public {
-        // Deploy
+        // Deploy with AI public key
         vm.startBroadcast(deployer);
-        serviceManager = new MyServiceManager(AVS_DIRECTORY);
+        serviceManager = new MyServiceManager(AVS_DIRECTORY, AI_PUBLIC_KEY);
         vm.stopBroadcast();
 
         // Register as an operator
