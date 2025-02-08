@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "_id": {
+        "type": "string",
+        "format": "uuid",
+        "coerce": true
+      },
+      "walletAddress": {
+        "type": "string"
+      },
+      "chatId": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string",
+        "description": "JSON string containing encrypted messages with format: { messages: [{ role: string, content: { $allot: string[] } }], title: string }"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "coerce": true
+      }
+    },
+    "required": ["_id", "walletAddress", "chatId", "message", "timestamp"],
+    "additionalProperties": false
+  }
+} 

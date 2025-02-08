@@ -39,16 +39,16 @@ function Header() {
     if (!mounted) return null;
 
     return (
-        <nav className="w-full flex justify-between items-center p-4 border-b bg-white dark:bg-gray-900">
-            <div className="font-bold text-xl text-gray-900 dark:text-white">
-                AI
+        <nav className="w-full flex justify-between items-center p-4 border-b bg-white dark:bg-gray-800 dark:border-gray-700">
+            <div className="font-bold text-xl text-black dark:text-white">
+                AI Chat
             </div>
 
             <div className="flex items-center gap-4">
                 {isConnected ? (
                     <>
                         <button 
-                            className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                            className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
                             onClick={() => open({ view: 'Account' })}
                         >
                             {formatAddress(address)}
@@ -58,7 +58,12 @@ function Header() {
                         </div>
                     </>
                 ) : (
-                    <w3m-button balance="show" />
+                    <button 
+                        onClick={() => open()}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        Connect Wallet
+                    </button>
                 )}
             </div>
         </nav>
