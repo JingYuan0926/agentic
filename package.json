@@ -28,7 +28,8 @@
     "openai": "^4.82.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "solc": "^0.8.28"
+    "solc": "^0.8.28",
+    "uuid": "^11.0.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
