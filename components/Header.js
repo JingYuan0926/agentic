@@ -39,21 +39,21 @@ function Header() {
     if (!mounted) return null;
 
     return (
-        <nav className="w-full flex justify-between items-center p-4 border-b bg-white dark:bg-gray-900">
-            <div className="font-bold text-xl text-gray-900 dark:text-white">
-                AI
+        <nav className="w-full flex justify-between items-center p-4 border-b bg-[#3674B5] dark:bg-[#3674B5]">
+            <div className="font-bold text-xl text-white dark:text-white">
+                AI Chatbot
             </div>
 
             <div className="flex items-center gap-4">
                 {isConnected ? (
                     <>
                         <button 
-                            className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                            className="px-4 py-2 rounded-lg border border-purple-700 hover:bg-purple-800 dark:border-purple-700 dark:hover:bg-purple-800 text-white"
                             onClick={() => open({ view: 'Account' })}
                         >
                             {formatAddress(address)}
                         </button>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                        <div className="text-sm text-gray-200 dark:text-gray-300">
                             {Number(balance).toFixed(4)} ETH
                         </div>
                     </>
