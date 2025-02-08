@@ -1,54 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title Donation Pool Contract
-/// @notice This contract allows users to donate money to a pool and withdraw funds securely with password protection.
+/// @title A simple counter contract
+/// @notice This contract allows incrementing and decrementing a counter
 contract Contract {
-    // State variables
-    address public owner;
-    uint256 public totalDonations;
-    bytes32 private passwordHash;
-    
-    // Events
-    event Donated(address indexed donor, uint256 amount);
-    event Withdrawn(address indexed owner, uint256 amount);
-    event PasswordChanged(address indexed owner);
+    uint256 private counter;
 
-    /// @notice Constructor to initialize the contract with a password hash
+    event CounterIncreased(uint256 newCounter);
+    event CounterDecreased(uint256 newCounter);
+
+    /// @notice Initializes the counter to zero
     constructor() {
-        owner = msg.sender;
-        passwordHash = keccak256(abi.encodePacked("0099"));
+        counter = 0;
     }
 
-    /// @notice Allows users to donate to the pool
-    /// @dev Updates total donations and emits a donation event
-    function donate() external payable {
-        require(msg.value > 0, "Donation must be greater than zero");
-        totalDonations += msg.value;
-        emit Donated(msg.sender, msg.value);
+    /// @notice Increments the counter by one
+    function increment() external {
+        counter++;
+        emit CounterIncreased(counter);
     }
 
-    /// @notice Allows the owner to withdraw funds from the pool
-    /// @param _password The password to authorize the withdrawal
-    /// @dev Validates the password and transfers the total donations to the owner
-    function withdraw(string calldata _password) external {
-        require(msg.sender == owner, "Only the owner can withdraw");
-        require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
-        
-        uint256 amount = totalDonations;
-        totalDonations = 0; // Reset total donations before transfer to prevent re-entrancy
-        payable(owner).transfer(amount);
-        emit Withdrawn(owner, amount);
+    /// @notice Decrements the counter by one
+    /// @dev Reverts if the counter is already zero
+    function decrement() external {
+        require(counter > 0, "Counter cannot be less than zero");
+        counter--;
+        emit CounterDecreased(counter);
     }
 
-    /// @notice Allows the owner to change the withdrawal password
-    /// @param newPassword The new password to set
-    /// @dev Validates the new password is not empty
-    function changePassword(string calldata newPassword) external {
-        require(msg.sender == owner, "Only the owner can change the password");
-        require(bytes(newPassword).length > 0, "Password cannot be empty");
-
-        passwordHash = keccak256(abi.encodePacked(newPassword));
-        emit PasswordChanged(owner);
+    /// @notice Returns the current value of the counter
+    /// @return The current counter value
+    function getCounter() external view returns (uint256) {
+        return counter;
     }
 }
