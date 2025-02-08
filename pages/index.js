@@ -1,6 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic';
-import Chat from '../components/Chat';
+import Agent from '../components/Agent';
 
 // Dynamically import Header with ssr disabled
 const Header = dynamic(() => import('../components/Header'), {
@@ -9,9 +9,9 @@ const Header = dynamic(() => import('../components/Header'), {
 
 export default function Home() {
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="w-screen h-screen overflow-hidden">
             <Header />
-            <Chat />
+            <Agent />
         </div>
     );
 }
