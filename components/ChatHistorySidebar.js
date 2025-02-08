@@ -3,7 +3,7 @@ import { TrashIcon } from '@heroicons/react/24/outline';
 import {CircularProgress} from "@heroui/progress";
 import { useState, useEffect } from 'react';
 
-function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
+function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, selectedChatId }) {
     const { address, isConnected } = useWeb3ModalAccount();
     const [chats, setChats] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -31,15 +31,18 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'readAll',
-                    walletAddress: address
+                    walletAddress: address // This ensures we only request user's own chats
                 }),
             });
 
             if (!response.ok) throw new Error('Failed to load chats');
             const data = await response.json();
             
+            // Filter chats to only show ones belonging to the current wallet
+            const userChats = data.filter(msg => msg.walletAddress === address);
+            
             // Group messages by chatId and combine their messages
-            const chatGroups = data.reduce((acc, msg) => {
+            const chatGroups = userChats.reduce((acc, msg) => {
                 const chatId = msg.chatId;
                 
                 try {
@@ -51,7 +54,8 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                             id: chatId,
                             messages: [],
                             timestamp: msg.timestamp,
-                            title: ''
+                            title: '',
+                            walletAddress: msg.walletAddress // Store wallet address for verification
                         };
                     }
 
@@ -81,7 +85,7 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
             // Sort chats by timestamp (newest first)
             const sortedChats = Object.values(chatGroups)
                 .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                .filter(chat => chat.title); // Only show chats with titles
+                .filter(chat => chat.title && chat.walletAddress === address); // Only show user's chats with titles
 
             setChats(sortedChats);
         } catch (error) {
@@ -92,7 +96,7 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
         }
     };
 
-    const handleDelete = async (e, chatId, messageId) => {
+    const handleDelete = async (e, chatId) => {
         e.stopPropagation();
         if (!confirm('Are you sure you want to delete this chat?')) return;
 
@@ -103,16 +107,19 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                 body: JSON.stringify({
                     action: 'delete',
                     walletAddress: address,
-                    messageId: messageId || chatId // Use messageId if available, fallback to chatId
+                    chatId: chatId
                 }),
             });
 
             if (!response.ok) throw new Error('Failed to delete chat');
             
-            setChats(prev => prev.filter(c => c.id !== chatId));
+            // Just remove the chat from local state
+            setChats(prev => prev.filter(chat => chat.id !== chatId));
+            // Notify parent component
             onChatDelete(chatId);
         } catch (error) {
             console.error('Failed to delete chat:', error);
+            alert('Failed to delete chat: ' + error.message);
         }
     };
 
@@ -150,7 +157,10 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                         Chat History
                     </h2>
                     <button
-                        onClick={() => onChatSelect({ id: null, isNew: true })}
+                        onClick={() => {
+                            // Force clear current chat
+                            onChatSelect({ id: null });
+                        }}
                         disabled={!isConnected}
                         className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 
                                  focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50
@@ -199,7 +209,7 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        handleDelete(e, chat.id, chat.messageId);
+                                        handleDelete(e, chat.id);
                                     }}
                                     className="absolute right-2 top-1/2 -translate-y-1/2
                                              text-red-500 hover:text-red-700 

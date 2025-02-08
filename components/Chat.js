@@ -17,24 +17,30 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
     const [chatId, setChatId] = useState(null);
     const messagesEndRef = useRef(null);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
-
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    // Modified useEffect to handle new chat
+    // Reset component when selectedChatId changes
     useEffect(() => {
         if (selectedChatId) {
             loadSavedChat(selectedChatId);
         } else {
-            // Clear messages for new chat
+            // Reset all states for new chat
             setMessages([]);
             setChatId(null);
+            setInput('');
+            setIsLoading(false);
+            setIsSaving(false);
+            // Force scroll to bottom after reset
+            scrollToBottom();
         }
     }, [selectedChatId]);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    // Scroll on messages update
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -184,7 +190,7 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
     };
 
     return (
-        <div className="flex justify-center">
+        <div className="flex justify-center" key={selectedChatId || 'new'}>
             <div className="flex flex-col h-[calc(100vh-73px)] w-full max-w-3xl">
                 {/* Chat messages area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">

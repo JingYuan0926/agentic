@@ -60,7 +60,9 @@ export default async function handler(req, res) {
 
       case 'readAll':
         console.log('📚 Reading All Data');
-        const allMessages = await wrapper.readFromNodes({});
+        const allMessages = await wrapper.readFromNodes({
+          walletAddress: req.body.walletAddress
+        });
         const sortedAllMessages = allMessages.sort((a, b) => 
           new Date(b.timestamp) - new Date(a.timestamp)
         );
