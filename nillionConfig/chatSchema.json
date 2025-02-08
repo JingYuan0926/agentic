@@ -12,6 +12,9 @@
       "walletAddress": {
         "type": "string"
       },
+      "chatId": {
+        "type": "string"
+      },
       "message": {
         "type": "string"
       },
@@ -21,7 +24,7 @@
         "coerce": true
       }
     },
-    "required": ["_id", "walletAddress", "message", "timestamp"],
+    "required": ["_id", "walletAddress", "chatId", "message", "timestamp"],
     "additionalProperties": false
   }
 } 

@@ -1,9 +1,8 @@
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import { TrashIcon } from '@heroicons/react/24/outline';
-import nillionService from '../services/nillionService.js';
 import { useState, useEffect } from 'react';
 
-function ChatHistorySidebar({ onChatSelect, onChatDelete }) {
+function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
     const { address, isConnected } = useWeb3ModalAccount();
     const [chats, setChats] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -15,28 +14,74 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete }) {
         } else {
             setChats([]);
         }
-    }, [isConnected, address]);
+    }, [isConnected, address, refreshTrigger]);
 
     const loadChats = async () => {
         if (!address) return;
         setIsLoading(true);
         try {
-            const chatList = await nillionService.getChatList(address);
-            setChats(chatList || []); // Ensure chats is always an array
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'readAll',
+                    walletAddress: address
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to load chats');
+            const data = await response.json();
+            
+            // Group messages by chatId and get first user message as title
+            const chatGroups = data.reduce((acc, msg) => {
+                const chatId = msg.chatId;
+                if (!acc[chatId]) {
+                    try {
+                        const conversation = JSON.parse(msg.message);
+                        // Find first user message
+                        const firstUserMessage = conversation.messages.find(m => m.role === 'user');
+                        acc[chatId] = {
+                            id: chatId,
+                            title: firstUserMessage ? firstUserMessage.content : 'New Chat',
+                            timestamp: msg.timestamp,
+                            messageId: msg._id,
+                            fullMessage: msg.message // Store full conversation for loading later
+                        };
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                    }
+                }
+                return acc;
+            }, {});
+
+            setChats(Object.values(chatGroups));
         } catch (error) {
             console.error('Failed to load chats:', error);
-            setChats([]); // Set empty array on error
+            setChats([]);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleDelete = async (e, chat) => {
+    const handleDelete = async (e, chatId, messageId) => {
         e.stopPropagation();
+        if (!confirm('Are you sure you want to delete this chat?')) return;
+
         try {
-            await nillionService.deleteChat(address, chat.id);
-            setChats(prev => prev.filter(c => c.id !== chat.id));
-            onChatDelete(chat.id);
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'delete',
+                    walletAddress: address,
+                    messageId: messageId || chatId // Use messageId if available, fallback to chatId
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to delete chat');
+            
+            setChats(prev => prev.filter(c => c.id !== chatId));
+            onChatDelete(chatId);
         } catch (error) {
             console.error('Failed to delete chat:', error);
         }
@@ -66,11 +111,11 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete }) {
                     <div className="space-y-2">
                         {chats.map((chat) => (
                             <div
-                                key={chat.id}
+                                key={`chat-${chat.id}`}
                                 className="flex items-center group"
                             >
                                 <button
-                                    onClick={() => !isConnected && onChatSelect(chat)}
+                                    onClick={() => onChatSelect(chat)}
                                     disabled={!isConnected}
                                     className="flex-1 text-left p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:cursor-not-allowed"
                                 >
@@ -85,8 +130,8 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete }) {
                                     </div>
                                 </button>
                                 <button
-                                    onClick={(e) => handleDelete(e, chat)}
-                                    className="p-2 text-red-500 hover:text-red-700 transition-colors"
+                                    onClick={(e) => handleDelete(e, chat.id, chat.messageId)}
+                                    className="p-2 text-red-500 hover:text-red-700 transition-colors opacity-0 group-hover:opacity-100"
                                     title="Delete chat"
                                     disabled={!isConnected}
                                 >

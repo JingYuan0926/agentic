@@ -2,18 +2,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import dynamic from 'next/dynamic';
-import nillionService from '../services/nillionService.js';
 
 // Disable SSR for the Chat component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
     ssr: false
 });
 
-function ChatComponent({ selectedChatId, onNewChat }) {
+function ChatComponent({ selectedChatId, onChatSaved }) {
     const { address, isConnected } = useWeb3ModalAccount();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [chatId, setChatId] = useState(null);
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -21,41 +22,30 @@ function ChatComponent({ selectedChatId, onNewChat }) {
     };
 
     useEffect(() => {
-        if (address && selectedChatId) {
-            loadMessages();
-        }
-    }, [address, selectedChatId]);
-
-    const loadMessages = async () => {
-        try {
-            const messages = await nillionService.getChatMessages(address, selectedChatId);
-            setMessages(messages);
-        } catch (error) {
-            console.error('Failed to load messages:', error);
-        }
-    };
-
-    useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
+    // Add effect to load chat when selectedChatId changes
+    useEffect(() => {
+        if (selectedChatId) {
+            loadSavedChat(selectedChatId);
+        } else {
+            // Clear messages when no chat is selected
+            setMessages([]);
+            setChatId(null);
+        }
+    }, [selectedChatId]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim() || !address || !isConnected) return;
+        if (!input.trim()) return;
 
         setIsLoading(true);
         try {
-            let currentChatId = selectedChatId;
-
-            // Create new chat if needed
-            if (!currentChatId) {
-                const newChat = await nillionService.createNewChat(address, input);
-                currentChatId = newChat.chatId;
-                onNewChat(newChat);
-            }
-
-            // Store user message
-            await nillionService.storeMessage(address, currentChatId, 'user', input);
+            // Add user message to UI immediately
+            const userMessage = { role: 'user', content: input };
+            setMessages(prev => [...prev, userMessage]);
+            setInput('');
 
             // Get AI response
             const response = await fetch('/api/ai-response', {
@@ -64,14 +54,12 @@ function ChatComponent({ selectedChatId, onNewChat }) {
                 body: JSON.stringify({ content: input }),
             });
 
-            if (!response.ok) throw new Error('Failed to get response');
+            if (!response.ok) throw new Error('Failed to get AI response');
             const data = await response.json();
             
-            // Store AI response
-            await nillionService.storeMessage(address, currentChatId, 'assistant', data.response);
-
-            // Refresh messages
-            await loadMessages();
+            // Add AI response to UI
+            const aiMessage = { role: 'assistant', content: data.response };
+            setMessages(prev => [...prev, aiMessage]);
 
         } catch (error) {
             console.error('Error:', error);
@@ -81,8 +69,87 @@ function ChatComponent({ selectedChatId, onNewChat }) {
                 isError: true
             }]);
         } finally {
-            setInput('');
             setIsLoading(false);
+        }
+    };
+
+    const handleSaveToNillion = async () => {
+        if (!isConnected || messages.length === 0) return;
+        
+        setIsSaving(true);
+        try {
+            // Create a conversation object that contains all messages
+            const conversation = {
+                messages: messages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                })),
+                title: messages[0].content.substring(0, 30) + '...' // Use first message as title
+            };
+
+            // Store the entire conversation as one record
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'store',
+                    walletAddress: address,
+                    message: JSON.stringify(conversation), // Store entire conversation as JSON string
+                    chatId: chatId || undefined // Include chatId if it exists
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to save conversation');
+            const result = await response.json();
+            
+            // If this is a new chat, store the returned chatId
+            if (!chatId && result.chatId) {
+                setChatId(result.chatId);
+            }
+            
+            alert('Conversation saved successfully!');
+            
+            // Call the refresh function after successful save
+            if (onChatSaved) {
+                onChatSaved();
+            }
+        } catch (error) {
+            console.error('Failed to save to Nillion:', error);
+            alert('Failed to save conversation: ' + error.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const loadSavedChat = async (savedChatId) => {
+        try {
+            const response = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'read',
+                    walletAddress: address,
+                    chatId: savedChatId
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to load chat');
+            const data = await response.json();
+            
+            if (data) {
+                try {
+                    // Parse the stored conversation JSON
+                    const conversation = JSON.parse(data.message);
+                    setMessages(conversation.messages);
+                    setChatId(savedChatId);
+                } catch (e) {
+                    console.error('Failed to parse conversation:', e);
+                    alert('Failed to load chat: Invalid format');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load chat:', error);
+            alert('Failed to load chat: ' + error.message);
         }
     };
 
@@ -104,7 +171,7 @@ function ChatComponent({ selectedChatId, onNewChat }) {
                         <>
                             {messages.map((message, index) => (
                                 <div 
-                                    key={index} 
+                                    key={index}
                                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                                 >
                                     <div 
@@ -127,7 +194,7 @@ function ChatComponent({ selectedChatId, onNewChat }) {
 
                 {/* Input area */}
                 <div className="border-t dark:border-gray-700 p-4">
-                    <form onSubmit={handleSubmit} className="flex gap-2 max-w-3xl mx-auto">
+                    <form onSubmit={handleSubmit} className="flex gap-2">
                         <input
                             type="text"
                             value={input}
@@ -144,6 +211,19 @@ function ChatComponent({ selectedChatId, onNewChat }) {
                             {isLoading ? 'Sending...' : 'Send'}
                         </button>
                     </form>
+
+                    {/* Save to Nillion button */}
+                    {messages.length > 0 && (
+                        <div className="mt-4 text-center">
+                            <button
+                                onClick={handleSaveToNillion}
+                                disabled={isSaving || !isConnected}
+                                className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 w-full"
+                            >
+                                {isSaving ? 'Saving...' : 'Save Conversation to Nillion'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

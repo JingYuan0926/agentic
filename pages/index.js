@@ -14,6 +14,7 @@ const ChatHistorySidebar = dynamic(() => import('../components/ChatHistorySideba
 
 export default function Home() {
     const [selectedChatId, setSelectedChatId] = useState(null);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const handleChatSelect = (chat) => {
         setSelectedChatId(chat.id);
@@ -25,18 +26,23 @@ export default function Home() {
         }
     };
 
+    const handleChatSaved = () => {
+        setRefreshTrigger(prev => prev + 1);
+    };
+
     return (
         <div className="flex flex-col h-screen">
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <ChatHistorySidebar 
+                    refreshTrigger={refreshTrigger}
                     onChatSelect={handleChatSelect}
                     onChatDelete={handleChatDelete}
                 />
                 <div className="flex-1">
                     <Chat 
                         selectedChatId={selectedChatId}
-                        onNewChat={(newChat) => setSelectedChatId(newChat.chatId)}
+                        onChatSaved={handleChatSaved}
                     />
                 </div>
             </div>

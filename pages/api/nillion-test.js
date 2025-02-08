@@ -26,45 +26,51 @@ export default async function handler(req, res) {
 
   try {
     const wrapper = await initNillion();
-    const { action, walletAddress, message, messageId } = req.body;
+    const { action, walletAddress, message, chatId } = req.body;
 
-    console.log('🔄 API Request:', { action, walletAddress, message, messageId });
+    console.log('🔄 API Request:', { action, walletAddress, message, chatId });
 
     switch (action) {
       case 'store':
+        const newChatId = chatId || uuidv4();
         const data = [{
           _id: uuidv4(),
           walletAddress,
           message,
+          chatId: newChatId,
           timestamp: new Date().toISOString()
         }];
         
         console.log('💾 Storing Data:', JSON.stringify(data, null, 2));
         const result = await wrapper.writeToNodes(data);
         console.log('✅ Store Result:', result);
-        return res.status(200).json(result);
+        return res.status(200).json({ ...result, chatId: newChatId });
 
       case 'read':
         console.log('🔍 Reading Data for Wallet:', walletAddress);
         const messages = await wrapper.readFromNodes({
-          walletAddress
+          walletAddress,
+          chatId
         });
         console.log('📖 Read Result:', messages);
-        return res.status(200).json(messages);
+        const sortedMessages = messages.sort((a, b) => 
+          new Date(b.timestamp) - new Date(a.timestamp)
+        );
+        return res.status(200).json(sortedMessages[0] || null);
 
       case 'readAll':
         console.log('📚 Reading All Data');
         const allMessages = await wrapper.readFromNodes({});
-        const sortedMessages = allMessages.sort((a, b) => 
+        const sortedAllMessages = allMessages.sort((a, b) => 
           new Date(b.timestamp) - new Date(a.timestamp)
         );
-        console.log('📚 Read All Result:', sortedMessages);
-        return res.status(200).json(sortedMessages);
+        console.log('📚 Read All Result:', sortedAllMessages);
+        return res.status(200).json(sortedAllMessages);
 
       case 'delete':
-        console.log('🗑️ Deleting Message:', messageId);
+        console.log('🗑️ Deleting Message:', message);
         const deleteFilter = {
-          _id: messageId,
+          _id: message,
           walletAddress // Include wallet address to ensure users can only delete their own messages
         };
         const deleteResult = await wrapper.deleteDataFromNodes(deleteFilter);
