@@ -94,9 +94,20 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger }) {
     return (
         <div className={`w-64 border-r dark:border-gray-700 overflow-y-auto ${!isConnected ? 'opacity-50' : ''}`}>
             <div className="p-4">
-                <h2 className="text-lg font-semibold mb-4 text-black dark:text-white">
-                    Chat History
-                </h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-semibold text-black dark:text-white">
+                        Chat History
+                    </h2>
+                    <button
+                        onClick={() => onChatSelect({ id: null, isNew: true })}
+                        disabled={!isConnected}
+                        className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 
+                                 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50
+                                 text-sm font-medium"
+                    >
+                        New Chat
+                    </button>
+                </div>
                 {isLoading ? (
                     <div className="flex items-center justify-center py-4">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>

@@ -25,12 +25,12 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
         scrollToBottom();
     }, [messages]);
 
-    // Add effect to load chat when selectedChatId changes
+    // Modified useEffect to handle new chat
     useEffect(() => {
         if (selectedChatId) {
             loadSavedChat(selectedChatId);
         } else {
-            // Clear messages when no chat is selected
+            // Clear messages for new chat
             setMessages([]);
             setChatId(null);
         }
@@ -38,7 +38,7 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim()) return;
+        if (!input.trim() || !isConnected) return;
 
         setIsLoading(true);
         try {
@@ -60,6 +60,11 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
             // Add AI response to UI
             const aiMessage = { role: 'assistant', content: data.response };
             setMessages(prev => [...prev, aiMessage]);
+
+            // Auto-save after first message exchange if it's a new chat
+            if (!chatId && messages.length === 0) {
+                await handleSaveToNillion();
+            }
 
         } catch (error) {
             console.error('Error:', error);
@@ -164,6 +169,15 @@ function ChatComponent({ selectedChatId, onChatSaved }) {
                                 <h2 className="text-xl font-semibold mb-4">Connect Wallet to Chat</h2>
                                 <p className="text-gray-600 dark:text-gray-400">
                                     Please connect your wallet to start chatting with AI
+                                </p>
+                            </div>
+                        </div>
+                    ) : messages.length === 0 ? (
+                        <div className="flex justify-center items-center h-full">
+                            <div className="text-center p-8 rounded-lg">
+                                <h2 className="text-xl font-semibold mb-4">Start a New Conversation</h2>
+                                <p className="text-gray-600 dark:text-gray-400">
+                                    Type a message below to begin chatting with AI
                                 </p>
                             </div>
                         </div>
