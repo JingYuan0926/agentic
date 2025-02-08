@@ -416,33 +416,15 @@ export default function Chat() {
 
             // Handle payable functions
             let txOptions = {};
-            let processedParams = [];
-
-            // Process parameters to extract actual values
-            if (params && typeof params === 'object') {
-                processedParams = Object.values(params).map(param => {
-                    // If param is an object with type and value, extract the value
-                    if (param && typeof param === 'object' && 'value' in param) {
-                        return param.value;
-                    }
-                    return param;
-                });
+            
+            // For payable functions, use the value parameter
+            if (functionInfo.stateMutability === 'payable' && params.value) {
+                txOptions = { value: params.value };
+                console.log('Payable transaction:', { value: params.value, formatted: ethers.formatEther(params.value) });
             }
-
-            // Handle payable functions after processing params
-            if (functionInfo.stateMutability === 'payable') {
-                const amount = processedParams[0] || '0';
-                txOptions = { value: ethers.parseEther(amount.toString()) };
-                console.log('Payable transaction:', { amount, wei: txOptions.value.toString() });
-            }
-
-            console.log('Processed parameters:', processedParams);
 
             // Execute the function
-            const tx = await contract[functionInfo.name](
-                ...processedParams,
-                txOptions
-            );
+            const tx = await contract[functionInfo.name](txOptions);
 
             addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
             
@@ -456,9 +438,11 @@ export default function Chat() {
 
         } catch (error) {
             console.error('Contract execution error:', error);
+            // Extract revert reason if available
+            const reason = error.reason || error.message;
             return {
                 success: false,
-                message: `Error: ${error.reason || error.message}`
+                message: `Error: ${reason}`
             };
         }
     };

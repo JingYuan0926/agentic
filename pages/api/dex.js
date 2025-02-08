@@ -126,6 +126,29 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
         // Create function call instance
         const functionCall = new FunctionCall(functionInfo.name);
         
+        // Special handling for payable functions
+        if (functionInfo.stateMutability === 'payable') {
+            // Extract amount from user query
+            const amountMatch = userQuery.match(/\b(\d+(?:\.\d+)?)\s*(flow|flows)?\b/i);
+            if (!amountMatch) {
+                return {
+                    success: false,
+                    message: "Could not find a valid amount in the query"
+                };
+            }
+            
+            const amount = amountMatch[1];
+            functionCall.addParameter('uint256', 'amount', ethers.parseEther(amount).toString());
+            
+            return {
+                success: true,
+                functionCall: functionCall.toJSON(),
+                params: {
+                    value: ethers.parseEther(amount).toString()
+                }
+            };
+        }
+
         // Handle functions with no inputs
         if (!functionInfo.inputs || functionInfo.inputs.length === 0) {
             return {
@@ -157,16 +180,11 @@ async function extractAndValidateParameters(userQuery, functionInfo) {
         const extractedValues = JSON.parse(analysis.choices[0].message.content);
         
         // Add parameters based on function type and inputs
-        if (functionInfo.stateMutability === 'payable') {
-            functionCall.addParameter('uint256', 'amount', extractedValues.amount || '0');
-        } else {
-            // Add other parameters based on function inputs
-            functionInfo.inputs.forEach(input => {
-                if (extractedValues[input.name]) {
-                    functionCall.addParameter(input.type, input.name, extractedValues[input.name]);
-                }
-            });
-        }
+        functionInfo.inputs.forEach(input => {
+            if (extractedValues[input.name]) {
+                functionCall.addParameter(input.type, input.name, extractedValues[input.name]);
+            }
+        });
 
         return {
             success: true,
@@ -203,8 +221,9 @@ async function extractAndExecuteFunction(userQuery, functionInfo) {
 
         // Create message based on function type
         let executionMessage = `Ready to execute ${functionInfo.name}`;
-        if (Object.keys(paramData.params).length > 0) {
-            executionMessage += ` with parameters: ${JSON.stringify(paramData.params)}`;
+        if (functionInfo.stateMutability === 'payable') {
+            const ethValue = ethers.formatEther(paramData.params.value);
+            executionMessage += ` with ${ethValue} FLOW`;
         }
 
         return {
