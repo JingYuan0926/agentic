@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
-import { useWeb3ModalAccount } from '@web3modal/ethers/react';
+import { useWeb3Modal, useWeb3ModalAccount, useWeb3ModalProvider } from '@web3modal/ethers/react';
 import dynamic from 'next/dynamic';
 import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
+import { BrowserProvider, Contract } from 'ethers';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -34,6 +35,8 @@ function ChatComponent() {
     const [connectedContract, setConnectedContract] = useState('');
 
     const { address, isConnected } = useWeb3ModalAccount();
+    const { walletProvider } = useWeb3ModalProvider();
+    const { open } = useWeb3Modal();
 
     // Add error state for consistency with nillion-test.js
     const [error, setError] = useState('');
@@ -58,10 +61,10 @@ function ChatComponent() {
 
     // Move wallet connection check to useEffect
     useEffect(() => {
-        if (isClient && isConnected && address) {
+        if (isClient && isConnected && address && walletProvider) {
             loadChatHistory();
         }
-    }, [isClient, isConnected, address]);
+    }, [isClient, isConnected, address, walletProvider]);
 
     // Auto-scroll chat boxes
     useEffect(() => {
@@ -175,58 +178,40 @@ function ChatComponent() {
 
     const connectWallet = async () => {
         try {
-            if (!window.ethereum) {
-                throw new Error('Please install MetaMask!');
+            await open(); // This opens Web3Modal
+            
+            if (walletProvider) {
+                const provider = new BrowserProvider(walletProvider);
+                const signer = await provider.getSigner();
+                setProvider(provider);
+                setSigner(signer);
+
+                const balance = await provider.getBalance(address);
+                const formattedBalance = ethers.formatEther(balance);
+                setWalletBalance(formattedBalance);
+                setWalletAddress(address);
+
+                addMessage('system', `Connected to wallet: ${address}`);
+                addMessage('system', `Balance: ${formattedBalance} FLOW`);
             }
-
-            addMessage('system', 'Connecting to MetaMask...');
-
-            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-            const address = accounts[0];
-            setWalletAddress(address);
-
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            setProvider(provider);
-            setSigner(signer);
-
-            // Switch to Flow Testnet
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x221' }],
-                });
-            } catch (switchError) {
-                if (switchError.code === 4902) {
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [{
-                            chainId: '0x221',
-                            chainName: 'Flow Testnet',
-                            nativeCurrency: {
-                                name: 'FLOW',
-                                symbol: 'FLOW',
-                                decimals: 18
-                            },
-                            rpcUrls: ['https://flow-testnet.g.alchemy.com/v2/your-api-key'],
-                            blockExplorerUrls: ['https://evm-testnet.flowscan.io']
-                        }]
-                    });
-                }
-            }
-
-            const balance = await provider.getBalance(address);
-            const formattedBalance = ethers.formatEther(balance);
-            setWalletBalance(formattedBalance);
-
-            addMessage('system', `Connected to MetaMask: ${address}`);
-            addMessage('system', `Balance: ${formattedBalance} FLOW`);
-
         } catch (error) {
             console.error('Connection error:', error);
             addMessage('system', `Error: ${error.message}`);
         }
     };
+
+    // Add an effect to handle connection changes
+    useEffect(() => {
+        if (isConnected && address && walletProvider) {
+            const setupConnection = async () => {
+                const provider = new BrowserProvider(walletProvider);
+                const signer = await provider.getSigner();
+                setProvider(provider);
+                setSigner(signer);
+            };
+            setupConnection();
+        }
+    }, [isConnected, address, walletProvider]);
 
     // Modify startNewChat to preserve old chat
     const startNewChat = () => {
@@ -283,12 +268,14 @@ function ChatComponent() {
                 }),
             });
 
+            // Update error handling
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                console.error('Store error:', response.status);
+                // Continue with local updates even if storage fails
             }
             
-            // Update local state with unencrypted content for display
-            const newMessage = { role, content, agent, timestamp }; // Use original content for display
+            // Update local state immediately
+            const newMessage = { role, content, agent, timestamp };
             setMessages(prev => [...prev, newMessage]);
 
             // Update chat history if needed
@@ -306,12 +293,10 @@ function ChatComponent() {
             console.log('💾 Message stored successfully');
             return messageData.chatId;
         } catch (error) {
-            console.error('Failed to store message:', error);
-            setMessages(prev => [...prev, {
-                role: 'system',
-                content: 'Failed to send message. Please try again.',
-                timestamp: Date.now()
-            }]);
+            console.error('Message error:', error);
+            // Still update local state even if there's an error
+            const newMessage = { role, content, agent, timestamp: Date.now() };
+            setMessages(prev => [...prev, newMessage]);
             throw error;
         }
     };
@@ -520,26 +505,35 @@ function ChatComponent() {
                             throw new Error('Failed to receive contract data');
                         }
 
-                        // Deploy contract
+                        // Modify contract deployment section
                         addMessage('assistant', 'Deploying contract...', 'Codey');
+                        
+                        // Add signer check
+                        if (!signer) {
+                            throw new Error('Please connect your wallet first');
+                        }
+
+                        // Get the signer again to ensure it's fresh
+                        const provider = new BrowserProvider(walletProvider);
+                        const currentSigner = await provider.getSigner();
+                        
+                        // Create contract factory with proper signer
                         const factory = new ethers.ContractFactory(
                             contractData.abi,
                             contractData.bytecode,
-                            signer
+                            currentSigner  // Use the fresh signer
                         );
 
                         const contract = await factory.deploy({
-                            gasLimit: 3000000,
-                            nonce: await signer.getNonce()
+                            gasLimit: 3000000
                         });
 
-                        addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
-                        await contract.waitForDeployment();
-                        const address = await contract.getAddress();
+                        addMessage('assistant', `Contract deployed to: ${contract.address}`, 'Codey');
 
-                        // Wait for a few blocks
-                        const receipt = await contract.deploymentTransaction().wait(2);
-                        addMessage('assistant', `Contract deployed to: ${address}`, 'Codey');
+                        // Set contract as connected
+                        setConnectedContract(contract.address);
+                        setIsContractConnected(true);
+                        addTeamUpdate('System', `Connected to contract ${contract.address}`);
 
                         // Wait before verification
                         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -549,7 +543,7 @@ function ChatComponent() {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                address: address,
+                                address: contract.address,
                                 contractCode: contractData.contractCode
                             })
                         });
@@ -557,14 +551,14 @@ function ChatComponent() {
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
                             addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
-                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${address}`, 'Codey');
+                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${contract.address}`, 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
 
                     } catch (error) {
-                        console.error('Codey error:', error);
-                        addMessage('system', `Error: ${error.message}`, 'System');
+                        console.error('Deployment error:', error);
+                        addMessage('system', `Error: ${error.message}`);
                     }
                 }
                 // If Finn detects contract connection request

@@ -23,7 +23,16 @@ const sepolia = {
   rpcUrl: 'https://ethereum-sepolia.publicnode.com'
 }
 
-// 3. Create modal
+// Add Flow EVM testnet configuration
+const flowTestnet = {
+  chainId: 545,  // Flow EVM Testnet Chain ID
+  name: 'Flow Testnet',
+  currency: 'FLOW',
+  explorerUrl: 'https://evm-testnet.flowscan.io',
+  rpcUrl: 'https://evm-testnet.flow.com/rpc'
+}
+
+// 3. Create modal with Flow testnet
 createWeb3Modal({
   ethersConfig: defaultConfig({ 
     metadata: {
@@ -37,7 +46,7 @@ createWeb3Modal({
     enableInjected: true,
     enableCoinbase: true,
   }),
-  chains: [holesky, sepolia],
+  chains: [holesky, sepolia, flowTestnet],  // Add flowTestnet to chains
   projectId,
   enableAnalytics: true,
   themeMode: 'light',
