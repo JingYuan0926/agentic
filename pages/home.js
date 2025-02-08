@@ -81,8 +81,9 @@ export default function Home() {
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(4, 1fr)', 
-          flex: 1,
-          gap: '20px'
+          height: '60vh',
+          gap: '20px',
+          minHeight: '300px'
         }}>
           <Canvas camera={{ position: [0, 0, 5] }}>
             <Blob shape="sphere" isActive={agentStates.analyzer.active} />
@@ -103,21 +104,25 @@ export default function Home() {
           backgroundColor: 'rgba(255, 255, 255, 0.9)',
           borderRadius: '8px',
           boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
-          maxHeight: '300px',
-          overflowY: 'auto'
+          flex: 1,
+          overflowY: 'auto',
+          fontSize: '16px'
         }}>
           {chatLog.map((entry, index) => (
             <div key={index} style={{ 
-              marginBottom: '8px',
-              fontFamily: 'monospace'
+              marginBottom: '12px',
+              fontFamily: 'monospace',
+              lineHeight: '1.5'
             }}>
               <span style={{ 
                 fontWeight: 'bold',
                 color: entry.agent === 'ERROR' ? '#ff4444' : 
-                       entry.agent === 'DONE' ? '#44ff44' : '#0088ff'
+                       entry.agent === 'DONE' ? '#44ff44' : '#0088ff',
+                fontSize: '18px'
               }}>
                 [{entry.agent}]:
-              </span> {entry.message}
+              </span>{' '}
+              <span style={{ whiteSpace: 'pre-wrap' }}>{entry.message}</span>
             </div>
           ))}
         </div>
