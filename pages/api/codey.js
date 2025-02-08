@@ -109,7 +109,7 @@ export default async function handler(req, res) {
                 }
             ],
             temperature: 0.7,
-            max_tokens: 2500
+            max_tokens: 2000
         });
 
         let contractCode = response.choices[0].message.content.trim();

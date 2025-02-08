@@ -155,7 +155,35 @@ export default function Chat() {
         addMessage('user', userMessage);
 
         try {
-            // When not connected, route through Finn first
+            // Check for contract address in the message when not connected
+            const addressMatch = userMessage.match(/0x[a-fA-F0-9]{40}/);
+            if (!isContractConnected && addressMatch) {
+                const contractAddress = addressMatch[0];
+                
+                // Set contract connection
+                setConnectedContract(contractAddress);
+                setIsContractConnected(true);
+                addTeamUpdate('System', `Connected to contract ${contractAddress}`);
+                addMessage('assistant', `Connected to contract ${contractAddress}. Passing to Vee for analysis...`, 'Finn');
+
+                // Immediately pass to Vee for analysis
+                const veeResponse = await fetch('/api/vee', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        userQuery: userMessage,
+                        context: { contractAddress }
+                    })
+                });
+                const veeData = await veeResponse.json();
+                if (veeData.message) {
+                    addMessage('assistant', veeData.message, 'Vee');
+                }
+                setIsLoading(false);
+                return;
+            }
+
+            // When not connected and no address found, route through Finn
             if (!isContractConnected) {
                 const finnResponse = await fetch('/api/finn', {
                     method: 'POST',
@@ -168,7 +196,7 @@ export default function Chat() {
                 const finnData = await finnResponse.json();
                 addMessage('assistant', finnData.teamResponse, 'Finn');
 
-                // If Finn detects contract generation request
+                // If Finn determines this is a generate request, pass to Codey
                 if (finnData.intent === 'generate') {
                     try {
                         const response = await fetch('/api/codey', {
@@ -390,13 +418,25 @@ export default function Chat() {
             let txOptions = {};
             let processedParams = [];
 
+            // Process parameters to extract actual values
+            if (params && typeof params === 'object') {
+                processedParams = Object.values(params).map(param => {
+                    // If param is an object with type and value, extract the value
+                    if (param && typeof param === 'object' && 'value' in param) {
+                        return param.value;
+                    }
+                    return param;
+                });
+            }
+
+            // Handle payable functions after processing params
             if (functionInfo.stateMutability === 'payable') {
-                const amount = params.amount || Object.values(params)[0];
+                const amount = processedParams[0] || '0';
                 txOptions = { value: ethers.parseEther(amount.toString()) };
                 console.log('Payable transaction:', { amount, wei: txOptions.value.toString() });
-            } else {
-                processedParams = Object.values(params);
             }
+
+            console.log('Processed parameters:', processedParams);
 
             // Execute the function
             const tx = await contract[functionInfo.name](
