@@ -10,6 +10,7 @@ import { Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/d
 import { Textarea } from "@heroui/input";
 import { FiMenu, FiSend } from 'react-icons/fi';
 import Header from '../components/Header';
+import AvatarGrid from '../components/AvatarGrid';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -836,19 +837,12 @@ function ChatComponent() {
 
     return (
         <div className="flex flex-col h-screen">
-            {/* Header only on right side */}
-            <div className="flex">
-                <div className="w-1/2"></div>
-                <div className="w-1/2">
-                    <Header />
-                </div>
-            </div>
+            {/* Header spans full width */}
+            <Header />
             
             <div className="flex flex-1 overflow-hidden">
-                {/* Left side - Chat History Drawer */}
-                <div className="w-1/2 border-r border-gray-200">
-                    {/* Empty for now */}
-                </div>
+                {/* Left side - Avatar Grid */}
+                <AvatarGrid />
 
                 {/* Right side - Chat Interface */}
                 <div className="w-1/2 flex flex-col">

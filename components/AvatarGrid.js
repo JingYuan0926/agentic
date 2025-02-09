@@ -44,13 +44,13 @@ export default function AvatarGrid() {
   };
 
   return (
-    <div className="w-1/2 relative flex items-center justify-center bg-white">
+    <div className="w-1/2 h-full relative flex items-center justify-center bg-white border-r">
       {/* Full screen cross lines */}
       <div className="absolute inset-0">
         {/* Vertical line */}
-        <div className="absolute left-1/2 top-0 w-[2px] h-full bg-black transform -translate-x-1/2"></div>
+        <div className="absolute left-1/2 top-0 w-[1px] h-full bg-gray-200 transform -translate-x-1/2"></div>
         {/* Horizontal line */}
-        <div className="absolute top-1/2 left-0 w-full h-[2px] bg-black transform -translate-y-1/2"></div>
+        <div className="absolute top-1/2 left-0 w-full h-[1px] bg-gray-200 transform -translate-y-1/2"></div>
       </div>
 
       {/* Grid container */}
