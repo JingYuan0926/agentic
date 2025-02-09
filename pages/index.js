@@ -75,6 +75,15 @@ function ChatComponent() {
     // Add state for chat history drawer
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
+    // Add this mapping near the top of the ChatComponent function
+    const agentAvatars = {
+        finn: '/ai-avatars/finn.png',
+        vee: '/ai-avatars/vee.png',
+        dex: '/ai-avatars/dex.png',
+        codey: '/ai-avatars/codey.png',
+        system: '/ai-avatars/system.png'
+    };
+
     // Add this effect at the top level of your component
     useEffect(() => {
         const checkAndSwitchNetwork = async () => {
@@ -967,7 +976,7 @@ function ChatComponent() {
                                     <div className="flex items-start gap-3">
                                         <div className="flex-shrink-0 text-center">
                                             <img 
-                                                src={`/ai-avatars/${message.agent?.toLowerCase() || 'finn'}.png`}
+                                                src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
                                                 alt={message.agent || 'Finn'}
                                                 className="w-8 h-8 rounded-full"
                                             />
