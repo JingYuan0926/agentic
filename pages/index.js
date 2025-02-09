@@ -885,7 +885,7 @@ function ChatComponent() {
                                         <FiMenu size={24} className={!isConnected ? 'text-gray-400' : ''} />
                                     </button>
                                 </DropdownTrigger>
-                                <DropdownMenu>
+                                <DropdownMenu aria-label="Model Selection">
                                     {!isConnected ? (
                                         <DropdownItem>
                                             <div className="text-gray-500">
@@ -975,11 +975,11 @@ function ChatComponent() {
                     </div>
 
                     {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto flex flex-col p-6">
+                    <div className="flex-1 overflow-y-auto flex flex-col p-6 space-y-4">
                         {messages.map((message, index) => (
                             <div
                                 key={index}
-                                className={`mb-4 transition-all duration-200 ease-in-out ${
+                                className={`transition-all duration-200 ease-in-out ${
                                     message.role === 'user' ? 'ml-auto max-w-[75%]' : 'mr-auto max-w-[75%] w-full'
                                 }`}
                             >
@@ -993,7 +993,7 @@ function ChatComponent() {
                                             <img 
                                                 src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
                                                 alt={message.agent || 'Finn'}
-                                                className="w-8 h-8 rounded-full"
+                                                className="w-8 h-8 rounded-full border-2 border-black"
                                             />
                                             <div className="text-sm font-medium text-gray-600 mt-1">
                                                 {message.agent || 'Finn'}
@@ -1052,7 +1052,7 @@ function ChatComponent() {
                         ))}
                     </div>
                     
-                    {/* Chat Input - Keep existing code */}
+                    {/* Chat Input */}
                     <div className="p-4 border-t">
                         <div className="flex items-end gap-2">
                             <Textarea
@@ -1067,14 +1067,33 @@ function ChatComponent() {
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={isLoading || !input.trim() || !isConnected}
+                                disabled={!input.trim() || !isConnected}
                                 className={`p-3 rounded-full ${
                                     !isConnected 
                                         ? 'bg-gray-300 cursor-not-allowed' 
                                         : 'bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300'
                                 } text-white`}
                             >
-                                <FiSend size={20} />
+                                {isLoading ? (
+                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                        <circle 
+                                            className="opacity-25" 
+                                            cx="12" 
+                                            cy="12" 
+                                            r="10" 
+                                            stroke="currentColor" 
+                                            strokeWidth="4" 
+                                            fill="none" 
+                                        />
+                                        <path 
+                                            className="opacity-75" 
+                                            fill="currentColor" 
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        />
+                                    </svg>
+                                ) : (
+                                    <FiSend size={20} />
+                                )}
                             </button>
                         </div>
                     </div>
