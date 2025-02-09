@@ -938,6 +938,24 @@ function ChatComponent() {
         }
     };
 
+    // Modify the useEffect for handling initial message
+    useEffect(() => {
+        const handleInitialMessage = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialMessage = urlParams.get('message');
+            
+            if (initialMessage && isConnected) {
+                setInput(initialMessage);
+                // Clean up URL without refreshing page
+                window.history.replaceState({}, '', '/chat');
+            }
+        };
+
+        if (isConnected) {
+            handleInitialMessage();
+        }
+    }, [isConnected]); // Simplified dependencies
+
     return (
         <div className="flex flex-col h-screen">
             {/* Header spans full width */}

@@ -18,25 +18,36 @@ export default function AIInterface() {
     const handleSubmit = async (e) => {
         e?.preventDefault();
         if (!isConnected) {
-            onOpen(); // Open modal instead of alert
+            onOpen();
             return;
         }
         if (input.trim() && !isLoading) {
             setIsLoading(true);
-            await router.push({
-                pathname: '/chat',
-                query: { message: input.trim() }
-            });
+            try {
+                await router.push({
+                    pathname: '/chat',
+                    query: { message: input.trim() }
+                });
+            } catch (error) {
+                console.error('Navigation error:', error);
+                setIsLoading(false);
+            }
         }
     };
 
     const handlePromptClick = async (promptText) => {
         if (!isConnected) {
-            onOpen(); // Open modal instead of alert
+            onOpen();
             return;
         }
-        setInput(promptText);
-        handleSubmit();
+        try {
+            await router.push({
+                pathname: '/chat',
+                query: { message: promptText }
+            });
+        } catch (error) {
+            console.error('Navigation error:', error);
+        }
     };
 
     return (
