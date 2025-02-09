@@ -288,7 +288,8 @@ async function generateTeamUpdate(event, details, selectedModel) {
                 - Accuracy: ${dexPersonality.traits.accuracy * 100}%
                 - Thoroughness: ${dexPersonality.traits.thoroughness * 100}%
                 
-                IMPORTANT: Start with "Dex:" and keep it under 2 sentences.`
+                IMPORTANT: Start with "Dex:" and keep it under 2 sentences.
+                NEVER use "Assistant:" in your response.`
             },
             {
                 role: "user",
@@ -300,8 +301,9 @@ async function generateTeamUpdate(event, details, selectedModel) {
             ? response.choices[0].message.content
             : response.choices[0].message.content;
             
+        // Always ensure Dex prefix
         if (!message.startsWith('Dex:')) {
-            message = `Dex: ${message}`;
+            message = `Dex: ${message.replace(/^(Assistant:|Dex:)?\s*/, '')}`;
         }
         return message;
     } catch (error) {

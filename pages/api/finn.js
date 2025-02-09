@@ -1,5 +1,5 @@
 import { createChatCompletion } from '../../utils/aiConfig';
-
+import OpenAI from 'openai';
 
 // AI Team Configuration
 const aiTeam = {

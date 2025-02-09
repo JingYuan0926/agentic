@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from 'react';
 import { useWeb3Modal, useWeb3ModalAccount, useWeb3ModalProvider } from '@web3modal/ethers/react'
 import { formatEther } from 'ethers';
@@ -40,8 +41,12 @@ function Header() {
 
     return (
         <nav className="w-full flex justify-between items-center p-4 border-b bg-white dark:bg-gray-800 dark:border-gray-700">
-            <div className="font-bold text-xl text-black dark:text-white">
-                AI Chat
+            <div className="h-8 relative p-0">
+                <img
+                    src="/logo.png"
+                    alt="AI Chat Logo"
+                    className="h-auto w-[250px] mt-[-47px] ml-[-20px]"
+                />
             </div>
 
             <div className="flex items-center gap-4">
@@ -70,4 +75,4 @@ function Header() {
     );
 }
 
-export default Header 
+export default Header; 

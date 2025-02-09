@@ -31,7 +31,8 @@ async function generateTeamUpdate(event, details, selectedModel) {
                 role: "system",
                 content: `You are ${codeyPersonality.name}, reporting progress to the team.
                 Create a SHORT team update message about the current process.
-                IMPORTANT: Start with "Codey:" and keep it under 2 sentences.`
+                IMPORTANT: Start with "Codey:" and keep it under 2 sentences.
+                NEVER use "Assistant:" in your response.`
             },
             {
                 role: "user",
@@ -44,7 +45,7 @@ async function generateTeamUpdate(event, details, selectedModel) {
             : response.choices[0].message.content;
             
         if (!message.startsWith('Codey:')) {
-            message = `Codey: ${message}`;
+            message = `Codey: ${message.replace(/^(Assistant:|Codey:)?\s*/, '')}`;
         }
         return message;
     } catch (error) {
