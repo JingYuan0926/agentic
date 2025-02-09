@@ -77,6 +77,14 @@ function ChatComponent() {
 
     // Add new state for active agent
     const [activeAgent, setActiveAgent] = useState(null);
+    // Add this mapping near the top of the ChatComponent function
+    const agentAvatars = {
+        finn: '/ai-avatars/finn.png',
+        vee: '/ai-avatars/vee.png',
+        dex: '/ai-avatars/dex.png',
+        codey: '/ai-avatars/codey.png',
+        system: '/ai-avatars/system.png'
+    };
 
     // Add this effect at the top level of your component
     useEffect(() => {
@@ -890,26 +898,41 @@ function ChatComponent() {
                                 <DropdownTrigger>
                                     <button 
                                         className="p-2 hover:bg-gray-100 rounded-full"
+                                        disabled={!isConnected}
                                     >
-                                        <FiMenu size={24} />
+                                        <FiMenu size={24} className={!isConnected ? 'text-gray-400' : ''} />
                                     </button>
                                 </DropdownTrigger>
                                 <DropdownMenu>
-                                    {chatHistory.map((chat) => (
-                                        <DropdownItem 
-                                            key={chat.id}
-                                            onClick={() => selectChat(chat.id)}
-                                        >
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-medium truncate">
-                                                    {chat.messages[0]?.content || 'New Chat'}
-                                                </span>
-                                                <span className="text-xs text-gray-500">
-                                                    {new Date(chat.timestamp).toLocaleDateString()}
-                                                </span>
+                                    {!isConnected ? (
+                                        <DropdownItem>
+                                            <div className="text-gray-500">
+                                                Connect wallet to view chat history
                                             </div>
                                         </DropdownItem>
-                                    ))}
+                                    ) : chatHistory.length === 0 ? (
+                                        <DropdownItem>
+                                            <div className="text-gray-500">
+                                                No chat history found
+                                            </div>
+                                        </DropdownItem>
+                                    ) : (
+                                        chatHistory.map((chat) => (
+                                            <DropdownItem 
+                                                key={chat.id}
+                                                onClick={() => selectChat(chat.id)}
+                                            >
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-medium truncate">
+                                                        {chat.messages[0]?.content || 'New Chat'}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500">
+                                                        {new Date(chat.timestamp).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                            </DropdownItem>
+                                        ))
+                                    )}
                                 </DropdownMenu>
                             </Dropdown>
                             
@@ -986,7 +1009,7 @@ function ChatComponent() {
                                     <div className="flex items-start gap-3">
                                         <div className="flex-shrink-0 text-center">
                                             <img 
-                                                src={`/ai-avatars/${message.agent?.toLowerCase() || 'finn'}.png`}
+                                                src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
                                                 alt={message.agent || 'Finn'}
                                                 className="w-8 h-8 rounded-full"
                                             />
@@ -1053,16 +1076,21 @@ function ChatComponent() {
                             <Textarea
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder="Type your message here..."
+                                placeholder={isConnected ? "Type your message here..." : "Connect wallet to start chatting"}
                                 minRows={1}
                                 maxRows={4}
                                 className="flex-1"
                                 onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                                disabled={!isConnected}
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={isLoading || !input.trim()}
-                                className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 disabled:bg-blue-300"
+                                disabled={isLoading || !input.trim() || !isConnected}
+                                className={`p-3 rounded-full ${
+                                    !isConnected 
+                                        ? 'bg-gray-300 cursor-not-allowed' 
+                                        : 'bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300'
+                                } text-white`}
                             >
                                 <FiSend size={20} />
                             </button>
