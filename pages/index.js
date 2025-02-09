@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { Textarea } from "@heroui/input";
 import { useRouter } from 'next/router';
 import { FiSend } from 'react-icons/fi';
+import Header from '../components/Header';
 
 export default function AIInterface() {
     const router = useRouter();
@@ -20,6 +21,11 @@ export default function AIInterface() {
         }
     };
 
+    const handlePromptClick = async (promptText) => {
+        setInput(promptText);
+        handleSubmit();
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#E0FFFF] to-[#E0FFFF]" style={{ fontFamily: 'Epilogue, sans-serif' }}>
             <Head>
@@ -30,21 +36,55 @@ export default function AIInterface() {
                 />
             </Head>
 
+            <Header />
+
             <main className="container mx-auto max-w-6xl px-4">
                 <div className="flex flex-col items-center justify-center min-h-screen">
-                    <div className="text-center space-y-6 w-full">
-                        <h1 className="text-6xl font-bold bg-gradient-to-r from-[#823EE4] via-[#99BBFF] to-[#00EF8B] inline-block text-transparent bg-clip-text">
-                            4 Human 1 AI
-                        </h1>
+                    <div className="text-center w-full">
+                        <div className="space-y-0">
+                            <h1 className="text-6xl font-bold bg-gradient-to-r from-[#823EE4] via-[#99BBFF] to-[#00EF8B] inline-block text-transparent bg-clip-text mb-0">
+                                4 Human 1 AI
+                            </h1>
 
-                        <div className="flex items-center justify-center gap-2 text-gray-600 -mt-2">
-                            <span className="font-epilogue text-xl">Built on</span>
-                            <div className="flex items-center translate-y-[-1px]">
-                                <img
-                                    src="/Flow1.svg"
-                                    alt="Flow Logo"
-                                    className="h-6 w-auto"
-                                />
+                            <div className="flex items-center justify-center -mt-1">
+                                <span className="font-epilogue text-xl">Built on</span>
+                                <div className="flex items-center translate-y-[-1px] ml-2">
+                                    <img
+                                        src="/Flow1.svg"
+                                        alt="Flow Logo"
+                                        className="h-6 w-auto"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 mb-6">
+                            <p className="text-gray-600 text-lg">
+                                Tell the AI what you want or press these to begin
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 max-w-3xl mx-auto mb-8">
+                            <div 
+                                onClick={() => handlePromptClick("I want to send Flow to my friend")}
+                                className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-lg transition-shadow"
+                            >
+                                <div className="text-2xl mb-3">🪙</div>
+                                <p className="text-gray-800">I want to send Flow to my friend</p>
+                            </div>
+                            <div 
+                                onClick={() => handlePromptClick("Generate a counter smart contract")}
+                                className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-lg transition-shadow"
+                            >
+                                <div className="text-2xl mb-3">🧮</div>
+                                <p className="text-gray-800">Generate a counter smart contract</p>
+                            </div>
+                            <div 
+                                onClick={() => handlePromptClick("Connect to this smart contract")}
+                                className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-lg transition-shadow"
+                            >
+                                <div className="text-2xl mb-3">📜</div>
+                                <p className="text-gray-800">Connect to this smart contract</p>
                             </div>
                         </div>
 
@@ -55,7 +95,7 @@ export default function AIInterface() {
                                     <div 
                                         className="absolute inset-0 bg-white rounded-lg"
                                         style={{
-                                            width: 'calc(100% - 52px)', // Subtracting button width + gap
+                                            width: 'calc(100% - 52px)',
                                             height: '50px'
                                         }}
                                     />

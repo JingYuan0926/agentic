@@ -59,7 +59,7 @@ function Header() {
                             {formatAddress(address)}
                         </button>
                         <div className="text-sm text-gray-600 dark:text-gray-300">
-                            {Number(balance).toFixed(4)} ETH
+                            {Number(balance).toFixed(4)} FLOW
                         </div>
                     </>
                 ) : (
