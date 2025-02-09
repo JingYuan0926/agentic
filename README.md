@@ -91,7 +91,7 @@ Though the user experiences a **single AI-driven interface** (the “agentic sma
 
 1. **Parameter Gathering & Execution**  
    - If the user wants to **interact with** an existing contract, **Vee** checks which function is being requested and validates the parameters.
-      > *“Connect to contract 0XABC and withdraw 2 ETH.”*  
+      > *“Connect to contract 0Xabc and withdraw 2 ETH.”*  
    - **Dex** fetches the contract’s ABI details, asks for any needed inputs, and **executes** the function on-chain.
 
 2. **User Interaction**  
