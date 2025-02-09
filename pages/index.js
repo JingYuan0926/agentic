@@ -61,23 +61,29 @@ function ChatComponent() {
     // Add this near the top with other state declarations
     const [selectedModel, setSelectedModel] = useState('openai'); // 'openai' or 'hyperbolic'
 
+    // Add this near the top of ChatComponent
+    const FLOW_CHAIN_ID = '0x221';
+
+    // Add this with other state declarations at the top
+    const [isGeneratingProof, setIsGeneratingProof] = useState(false);
+
     // Add this effect at the top level of your component
     useEffect(() => {
         const checkAndSwitchNetwork = async () => {
-            if (window.ethereum && signer) {
+            if (window.ethereum && signer && !isGeneratingProof) {
                 const network = await window.ethereum.request({ method: 'eth_chainId' });
-                if (network !== '0x221') { // If not on Flow
+                if (network !== FLOW_CHAIN_ID) {
                     try {
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: '0x221' }],
+                            params: [{ chainId: FLOW_CHAIN_ID }],
                         });
                     } catch (switchError) {
                         if (switchError.code === 4902) {
                             await window.ethereum.request({
                                 method: 'wallet_addEthereumChain',
                                 params: [{
-                                    chainId: '0x221',
+                                    chainId: FLOW_CHAIN_ID,
                                     chainName: 'EVM on Flow (testnet)',
                                     nativeCurrency: {
                                         name: 'Flow Token',
@@ -94,7 +100,7 @@ function ChatComponent() {
             }
         };
         checkAndSwitchNetwork();
-    }, [signer]);
+    }, [signer, isGeneratingProof]);
 
     // Handle client-side initialization
     useEffect(() => {
@@ -924,7 +930,7 @@ function ChatComponent() {
                                     onChange={(e) => setSelectedModel(e.target.value)}
                                     className="border rounded px-3 py-1 text-sm"
                                 >
-                                    <option value="openai">OpenAI GPT-4</option>
+                                    <option value="openai">OpenAI GPT-4o</option>
                                     <option value="hyperbolic">Llama 3.3 70B</option>
                                 </select>
                             </div>
@@ -979,6 +985,7 @@ function ChatComponent() {
                         messages={messages} 
                         signer={signer} 
                         onTransactionComplete={handleTransactionComplete}
+                        setIsGeneratingProof={setIsGeneratingProof}
                     />
 
                     {/* Input Area */}
