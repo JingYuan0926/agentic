@@ -1,54 +1,43 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple counter contract
-/// @notice This contract allows users to increment, decrement, and retrieve the counter value
+/// @title Simple Fund Transfer Contract with Password Protection
+/// @notice This contract allows sending funds to a specified address and requires a password to withdraw them.
 contract Contract {
-    uint256 private counter;
+    address public owner;
     bytes32 private passwordHash;
+    mapping(address => uint256) public balances;
 
-    event CounterIncremented(uint256 newCounter);
-    event CounterDecremented(uint256 newCounter);
-    event Withdraw(address indexed to, uint256 amount);
+    event FundsDeposited(address indexed sender, uint256 amount);
+    event Withdrawn(address indexed recipient, uint256 amount);
 
-    /// @notice Initializes the contract with a password hash
-    function initialize() public {
-        require(passwordHash == bytes32(0), "Contract already initialized");
+    /// @notice Constructor initializes the contract with a password hash
+    constructor() {
+        owner = msg.sender;
         passwordHash = keccak256(abi.encodePacked("0000"));
-        counter = 0;
     }
 
-    /// @notice Increments the counter by 1
-    function increment() public {
-        counter++;
-        emit CounterIncremented(counter);
+    /// @notice Allows the owner to deposit funds to the contract
+    /// @dev This function is payable
+    function deposit() external payable {
+        require(msg.value > 0, "Deposit amount must be greater than zero");
+        balances[msg.sender] += msg.value;
+        emit FundsDeposited(msg.sender, msg.value);
     }
 
-    /// @notice Decrements the counter by 1
-    function decrement() public {
-        require(counter > 0, "Counter cannot go below zero");
-        counter--;
-        emit CounterDecremented(counter);
-    }
-
-    /// @notice Retrieves the current counter value
-    /// @return The current value of the counter
-    function getCounter() public view returns (uint256) {
-        return counter;
-    }
-
-    /// @notice Withdraws funds from the contract if the correct password is provided
-    /// @param _password The password to validate
-    /// @param _to The address to send the funds to
-    /// @param _amount The amount to withdraw
-    function withdraw(string memory _password, address payable _to, uint256 _amount) public payable {
+    /// @notice Withdraws funds from the contract after password verification
+    /// @param _password The password to verify
+    /// @dev This function is payable
+    function withdraw(string memory _password) external {
+        require(balances[msg.sender] > 0, "No funds available for withdrawal");
         require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
-        require(address(this).balance >= _amount, "Insufficient balance");
 
-        _to.transfer(_amount);
-        emit Withdraw(_to, _amount);
+        uint256 amount = balances[msg.sender];
+        balances[msg.sender] = 0;
+
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
+
+        emit Withdrawn(msg.sender, amount);
     }
-
-    /// @notice Allows the contract to receive Ether
-    receive() external payable {}
 }

@@ -3,6 +3,7 @@ import { writeFile, readFile } from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import fetch from 'node-fetch';
 
 const execAsync = promisify(exec);
 
@@ -53,6 +54,44 @@ async function generateTeamUpdate(event, details, selectedModel) {
     }
 }
 
+// Get wallet address function
+async function getConnectedWalletAddress() {
+    try {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const response = await fetch(`${baseUrl}/api/address`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.address;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error getting wallet address:', error);
+        return null;
+    }
+}
+
+// Add this function at the top with other helper functions
+async function hasConstructor(contractCode) {
+    return contractCode.includes('constructor');
+}
+
+// Add this function to extract constructor parameters
+async function getConstructorParams(contractCode) {
+    const constructorMatch = contractCode.match(/constructor\((.*?)\)/);
+    if (!constructorMatch) return null;
+    
+    const params = constructorMatch[1].split(',').map(p => p.trim());
+    if (params.length === 0 || params[0] === '') return null;
+    
+    return params;
+}
+
 // Main handler
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -60,7 +99,8 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { prompt, signer, selectedModel } = req.body;
+        const { prompt, selectedModel } = req.body;
+        const walletAddress = await getConnectedWalletAddress();
 
         // Send initial SSE headers
         res.writeHead(200, {
@@ -107,7 +147,7 @@ export default async function handler(req, res) {
                 16. Make sure the contract is easy to understand and use
                 17. Make sure the contract is easy to deploy and test
                 18. Use payable for functions that involve transactions
-                19. Dont use constructor, use initialize function`
+                19. Use constructor when you can get it from the user, if not then dont use it`
             },
             {
                 role: "user",
@@ -172,22 +212,75 @@ export default async function handler(req, res) {
             }
         }
 
-        // Read the artifacts
-        const artifactsPath = path.join(process.cwd(), 'hardhat/artifacts/contracts/Contract.sol/Contract.json');
-        const artifacts = JSON.parse(await readFile(artifactsPath, 'utf8'));
-
-        res.write(`data: ${JSON.stringify({ 
-            status: 'Contract compiled successfully! Ready for deployment...', 
-            step: 4,
-            abi: artifacts.abi,
-            bytecode: artifacts.bytecode,
-            contractCode
-        })}\n\n`);
+        // After successful compilation, check for constructor
+        const hasConstructorFn = await hasConstructor(contractCode);
         
-        res.end();
+        try {
+            if (hasConstructorFn) {
+                // Get constructor parameters if they exist
+                const params = await getConstructorParams(contractCode);
+                if (params) {
+                    console.log('Constructor parameters found:', params);
+                }
+                // Use deployC.js for contracts with constructor
+                const { stdout: deployOutput, stderr: deployError } = await execAsync('cd hardhat && npx hardhat run scripts/deployC.js');
+                if (deployError) {
+                    throw new Error(`Deployment failed: ${deployError}`);
+                }
+                console.log('Deploy output:', deployOutput);
+            } else {
+                // Use deploy.js for contracts without constructor
+                const { stdout: deployOutput, stderr: deployError } = await execAsync('cd hardhat && npx hardhat run scripts/deploy.js');
+                if (deployError) {
+                    throw new Error(`Deployment failed: ${deployError}`);
+                }
+                console.log('Deploy output:', deployOutput);
+            }
+
+            // Read the artifacts
+            const artifactsPath = path.join(process.cwd(), 'hardhat/artifacts/contracts/Contract.sol/Contract.json');
+            const artifacts = JSON.parse(await readFile(artifactsPath, 'utf8'));
+
+            // Clean up wallet file after successful compilation
+            try {
+                await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/address`, {
+                    method: 'DELETE'
+                });
+            } catch (error) {
+                console.error('Error cleaning up wallet file:', error);
+            }
+
+            res.write(`data: ${JSON.stringify({ 
+                status: 'Contract compiled successfully! Ready for deployment...', 
+                step: 4,
+                abi: artifacts.abi,
+                bytecode: artifacts.bytecode,
+                contractCode
+            })}\n\n`);
+            
+            res.end();
+
+        } catch (error) {
+            console.error('Deployment error:', error);
+            res.write(`data: ${JSON.stringify({ 
+                status: 'Error: ' + error.message,
+                error: true,
+                contractCode
+            })}\n\n`);
+            res.end();
+        }
 
     } catch (error) {
         console.error('Internal error:', error);
+        // Clean up wallet file on error
+        try {
+            await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/address`, {
+                method: 'DELETE'
+            });
+        } catch (cleanupError) {
+            console.error('Error cleaning up wallet file:', cleanupError);
+        }
+
         res.write(`data: ${JSON.stringify({ 
             status: 'Error: ' + error.message,
             error: true

@@ -578,10 +578,8 @@ function ChatComponent() {
                             })
                         });
 
-                        // Use stream reading like in codeytest.js
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
-                        let contractData = null;
 
                         while (true) {
                             const { done, value } = await reader.read();
@@ -592,105 +590,29 @@ function ChatComponent() {
 
                             for (const line of lines) {
                                 if (line.trim() && line.startsWith('data: ')) {
-                                    const eventData = JSON.parse(line.slice(6));
-                                    addMessage('assistant', eventData.status, 'Codey');
+                                    try {
+                                        const eventData = JSON.parse(line.slice(6));
+                                        
+                                        // Add message for status updates
+                                        if (eventData.status) {
+                                            addMessage('assistant', eventData.status, 'Codey');
+                                        }
 
-                                    if (eventData.abi && eventData.bytecode) {
-                                        contractData = eventData;
-                                    }
+                                        // Handle contract data
+                                        if (eventData.abi && eventData.bytecode) {
+                                            setContractABI(eventData.abi);
+                                            setContractBytecode(eventData.bytecode);
+                                        }
 
-                                    if (eventData.error) {
-                                        throw new Error(eventData.status);
+                                        if (eventData.error) {
+                                            throw new Error(eventData.status);
+                                        }
+                                    } catch (parseError) {
+                                        console.error('Error parsing event data:', parseError);
                                     }
                                 }
                             }
                         }
-
-                        if (!contractData) {
-                            throw new Error('Failed to receive contract data');
-                        }
-
-                        // Deploy contract
-                        addMessage('assistant', 'Deploying contract...', 'Codey');
-                        const factory = new ethers.ContractFactory(
-                            contractData.abi,
-                            contractData.bytecode,
-                            signer
-                        );
-
-                        const contract = await factory.deploy({
-                            gasLimit: 3000000
-                        });
-
-                        addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
-                        await contract.waitForDeployment();
-                        const deployedAddress = await contract.getAddress();  // Get address immediately
-
-                        // Wait for a few blocks
-                        const receipt = await contract.deploymentTransaction().wait(2);
-
-                        // Set contract as connected
-                        setConnectedContract(deployedAddress);
-                        setIsContractConnected(true);
-                        addTeamUpdate('System', `Connected to contract ${deployedAddress}`);
-
-                        // Wait before verification
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-
-                        // Verify contract with the correct address
-                        const verifyResponse = await fetch('/api/verify', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                address: deployedAddress,  // Use deployedAddress consistently
-                                contractCode: contractData.contractCode,
-                                selectedModel
-                            })
-                        });
-
-                        const verifyData = await verifyResponse.json();
-                        if (verifyData.success) {
-                            setDeployedAddress(deployedAddress);
-                            addMessage('assistant', 'Contract deployed!', 'Codey');
-                            
-                            // Add View on Explorer link
-                            addMessage('assistant', 
-                                <Link 
-                                    href={verifyData.explorerUrl}
-                                    isExternal
-                                    showAnchorIcon
-                                    color="primary"
-                                    className="hover:opacity-70"
-                                >
-                                    View on Explorer
-                                </Link>, 
-                                'Codey'
-                            );
-
-                            // Add proof generation prompt
-                            addMessage('assistant', 'Do you want to generate a proof of execution on chain?', 'Codey');
-
-                            // Add contract explanation at the end
-                            try {
-                                const explainResponse = await fetch('/api/explain', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        contractAddress: deployedAddress,
-                                    })
-                                });
-
-                                const explainData = await explainResponse.json();
-                                if (explainData.success) {
-                                    addMessage('assistant', `Here's what you can do with your new contract:\n${explainData.explanation}`, 'Vee');
-                                }
-                            } catch (explainError) {
-                                console.error('Error getting contract explanation:', explainError);
-                            }
-                        } else {
-                            addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
-                        }
-
                     } catch (error) {
                         console.error('Deployment error:', error);
                         addMessage('system', `Error: ${error.message}`, 'System');

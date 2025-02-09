@@ -14,6 +14,35 @@ function Header() {
         setMounted(true);
     }, []);
 
+    // Send address to API when connected
+    useEffect(() => {
+        const updateWalletAddress = async () => {
+            if (isConnected && address) {
+                try {
+                    console.log('Sending address to API:', address);
+                    const response = await fetch('/api/address', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ address })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to update wallet address');
+                    }
+
+                    const data = await response.json();
+                    console.log('Wallet address updated:', data.message);
+                } catch (error) {
+                    console.error('Error updating wallet address:', error);
+                }
+            }
+        };
+
+        updateWalletAddress();
+    }, [isConnected, address]);
+
     // Get balance when connected
     useEffect(() => {
         const getBalance = async () => {
