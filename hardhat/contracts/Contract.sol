@@ -1,54 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple counter contract
-/// @notice This contract allows users to increment, decrement, and retrieve the counter value
+/// @title Simple Password Protected Contract
+/// @notice This contract allows for secure withdrawal of funds using a password.
 contract Contract {
-    uint256 private counter;
     bytes32 private passwordHash;
+    event FundsWithdrawn(address indexed to, uint256 amount);
+    event PasswordChanged();
 
-    event CounterIncremented(uint256 newCounter);
-    event CounterDecremented(uint256 newCounter);
-    event Withdraw(address indexed to, uint256 amount);
-
-    /// @notice Initializes the contract with a password hash
-    function initialize() public {
-        require(passwordHash == bytes32(0), "Contract already initialized");
+    /// @notice Initializes the contract with a default password hash.
+    function initialize() external {
+        require(passwordHash == 0, "Contract already initialized");
         passwordHash = keccak256(abi.encodePacked("0000"));
-        counter = 0;
     }
 
-    /// @notice Increments the counter by 1
-    function increment() public {
-        counter++;
-        emit CounterIncremented(counter);
-    }
-
-    /// @notice Decrements the counter by 1
-    function decrement() public {
-        require(counter > 0, "Counter cannot go below zero");
-        counter--;
-        emit CounterDecremented(counter);
-    }
-
-    /// @notice Retrieves the current counter value
-    /// @return The current value of the counter
-    function getCounter() public view returns (uint256) {
-        return counter;
-    }
-
-    /// @notice Withdraws funds from the contract if the correct password is provided
-    /// @param _password The password to validate
-    /// @param _to The address to send the funds to
-    /// @param _amount The amount to withdraw
-    function withdraw(string memory _password, address payable _to, uint256 _amount) public payable {
+    /// @notice Allows the sender to withdraw funds if they provide the correct password.
+    /// @param _password The password to authorize the withdrawal.
+    function withdraw(string calldata _password) external payable {
+        require(msg.value > 0, "Must send funds to withdraw");
         require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
-        require(address(this).balance >= _amount, "Insufficient balance");
-
-        _to.transfer(_amount);
-        emit Withdraw(_to, _amount);
+        
+        payable(msg.sender).transfer(msg.value);
+        emit FundsWithdrawn(msg.sender, msg.value);
     }
 
-    /// @notice Allows the contract to receive Ether
+    /// @notice Allows the owner to change the password.
+    /// @param _newPassword The new password to set.
+    function changePassword(string calldata _newPassword) external {
+        passwordHash = keccak256(abi.encodePacked(_newPassword));
+        emit PasswordChanged();
+    }
+
+    /// @notice Allows the contract to receive Ether.
     receive() external payable {}
 }

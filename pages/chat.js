@@ -12,6 +12,8 @@ import { FiMenu, FiSend } from 'react-icons/fi';
 import Header from '../components/Header';
 import AvatarGrid from '../components/AvatarGrid';
 import { Link } from "@heroui/link";
+import TransactionModal from '../components/TransactionModal';
+import ChatHistorySidebar from '../components/ChatHistorySidebar';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -1029,6 +1031,28 @@ function ChatComponent() {
         }
     };
 
+    // Add new state for sliding sidebar
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    // Add this function inside ChatComponent before the return statement
+    const handleChatSelect = (chatId) => {
+        // Find the selected chat from history
+        const selectedChat = chatHistory.find(chat => chat.id === chatId);
+        if (selectedChat) {
+            // Update current chat ID
+            setCurrentChatId(chatId);
+            // Set the messages from the selected chat
+            setMessages(selectedChat.messages);
+            // Close the sidebar after selection
+            setIsSidebarOpen(false);
+        }
+    };
+
+    // Add a button to open the sidebar in the header area
+    const toggleSidebar = () => {
+        setIsSidebarOpen(!isSidebarOpen);
+    };
+
     return (
         <div className="flex flex-col h-screen">
             {/* Header spans full width */}
@@ -1270,46 +1294,30 @@ function ChatComponent() {
                 </div>
             </div>
 
-            {/* Transaction Popup */}
-            {txPopup && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-                        <h3 className="text-lg font-bold mb-4">Verified on Chain! 🎉</h3>
-                        <div className="space-y-3">
-                            <div>
-                                <p className="text-gray-600 mb-1">Task Creation:</p>
-                                <Link 
-                                    href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
-                                    isExternal
-                                    showAnchorIcon
-                                    color="primary"
-                                    className="hover:opacity-70"
-                                >
-                                    View on Explorer
-                                </Link>
-                            </div>
-                            <div>
-                                <p className="text-gray-600 mb-1">Operator Response:</p>
-                                <Link 
-                                    href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
-                                    isExternal
-                                    showAnchorIcon
-                                    color="primary"
-                                    className="hover:opacity-70"
-                                >
-                                    View on Explorer
-                                </Link>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => setTxPopup(null)}
-                            className="mt-6 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                        >
-                            Close
-                        </button>
-                    </div>
-                </div>
+            {/* Transaction Modal */}
+            <TransactionModal 
+                txData={txPopup} 
+                onClose={() => setTxPopup(null)}
+            />
+
+            {/* Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 z-40"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
             )}
+
+            {/* Sliding Sidebar */}
+            <div className={`fixed left-0 top-0 h-full bg-white shadow-xl z-50 transition-transform duration-300 transform ${
+                isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}>
+                <ChatHistorySidebar
+                    onChatSelect={handleChatSelect}
+                    selectedChatId={currentChatId}
+                    onClose={() => setIsSidebarOpen(false)}
+                />
+            </div>
         </div>
     );
 }
