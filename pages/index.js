@@ -58,6 +58,9 @@ function ChatComponent() {
     // Add new state for transaction popup
     const [txPopup, setTxPopup] = useState(null);
 
+    // Add this near the top with other state declarations
+    const [selectedModel, setSelectedModel] = useState('openai'); // 'openai' or 'hyperbolic'
+
     // Add this effect at the top level of your component
     useEffect(() => {
         const checkAndSwitchNetwork = async () => {
@@ -477,7 +480,8 @@ function ChatComponent() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         userQuery: userMessage,
-                        context: { contractAddress }
+                        context: { contractAddress },
+                        selectedModel
                     })
                 });
                 const veeData = await veeResponse.json();
@@ -494,7 +498,8 @@ function ChatComponent() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        message: userMessage
+                        message: userMessage,
+                        selectedModel
                     })
                 });
 
@@ -508,7 +513,8 @@ function ChatComponent() {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
-                                message: userMessage
+                                message: userMessage,
+                                selectedModel
                             })
                         });
 
@@ -578,7 +584,8 @@ function ChatComponent() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 address: deployedAddress,  // Use deployedAddress consistently
-                                contractCode: contractData.contractCode
+                                contractCode: contractData.contractCode,
+                                selectedModel
                             })
                         });
 
@@ -608,7 +615,8 @@ function ChatComponent() {
                         body: JSON.stringify({ 
                             messages,
                             userQuery: userMessage,
-                            context: { contractAddress: finnData.contractAddress }
+                            context: { contractAddress: finnData.contractAddress },
+                            selectedModel
                         })
                     });
                     const veeData = await veeResponse.json();
@@ -625,7 +633,8 @@ function ChatComponent() {
                     body: JSON.stringify({ 
                         messages,
                         userQuery: userMessage,
-                        context: { contractAddress: connectedContract }
+                        context: { contractAddress: connectedContract },
+                        selectedModel
                     })
                 });
 
@@ -654,7 +663,8 @@ function ChatComponent() {
                             messages,
                             userQuery: userMessage,
                             functionInfo: functionInfo,
-                            contractAddress: connectedContract
+                            contractAddress: connectedContract,
+                            selectedModel
                         })
                     });
 
@@ -902,6 +912,23 @@ function ChatComponent() {
                                 Disconnect
                             </button>
                         )}
+                    </div>
+
+                    {/* AI Model Selector */}
+                    <div className="p-4 border-b">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <label className="text-sm font-medium text-gray-700">AI Model:</label>
+                                <select
+                                    value={selectedModel}
+                                    onChange={(e) => setSelectedModel(e.target.value)}
+                                    className="border rounded px-3 py-1 text-sm"
+                                >
+                                    <option value="openai">OpenAI GPT-4</option>
+                                    <option value="hyperbolic">Llama 3.3 70B</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Messages Area */}
