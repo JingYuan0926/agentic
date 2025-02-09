@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import Blob from './Blob';
 
-export default function AvatarGrid() {
-  const [activeAgent, setActiveAgent] = useState(null);
+export default function AvatarGrid({ activeAgent }) {
   const [agentStates, setAgentStates] = useState({
     finder: { active: false, message: '', position: 0 },
     creator: { active: false, message: '', position: 1 },
@@ -11,37 +10,29 @@ export default function AvatarGrid() {
     verifier: { active: false, message: '', position: 3 }
   });
 
+  useEffect(() => {
+    if (activeAgent) {
+      const resetStates = Object.keys(agentStates).reduce((acc, key) => ({
+        ...acc,
+        [key]: { ...agentStates[key], active: false }
+      }), {});
+
+      setAgentStates({
+        ...resetStates,
+        [activeAgent.toLowerCase()]: { 
+          ...agentStates[activeAgent.toLowerCase()], 
+          active: true 
+        }
+      });
+    }
+  }, [activeAgent]);
+
   const blobs = [
     { shape: 'sphere', position: 'top-left', name: 'Finn the Finder', id: 'finder' },
     { shape: 'dna', position: 'top-right', name: 'Codey the Creator', id: 'creator' },
     { shape: 'diamond', position: 'bottom-left', name: 'Dex the Developer', id: 'developer' },
     { shape: 'torus', position: 'bottom-right', name: 'Vee the Verifier', id: 'verifier' }
   ];
-
-  const handleAgentClick = (agentId) => {
-    if (activeAgent === agentId) {
-      // Deactivate current agent
-      setActiveAgent(null);
-      setAgentStates(prev => ({
-        ...prev,
-        [agentId]: { ...prev[agentId], active: false }
-      }));
-    } else {
-      // Deactivate previous agent if exists
-      if (activeAgent) {
-        setAgentStates(prev => ({
-          ...prev,
-          [activeAgent]: { ...prev[activeAgent], active: false }
-        }));
-      }
-      // Activate new agent
-      setActiveAgent(agentId);
-      setAgentStates(prev => ({
-        ...prev,
-        [agentId]: { ...prev[agentId], active: true }
-      }));
-    }
-  };
 
   return (
     <div className="w-1/2 h-full relative flex items-center justify-center bg-white border-r">
@@ -58,9 +49,8 @@ export default function AvatarGrid() {
         {blobs.map((blob, index) => (
           <div 
             key={index} 
-            className={`relative w-full h-full p-8 flex flex-col items-center cursor-pointer
+            className={`relative w-full h-full p-8 flex flex-col items-center
               ${agentStates[blob.id].active ? 'agent-active' : ''}`}
-            onClick={() => handleAgentClick(blob.id)}
           >
             <div className={`flex-1 w-full rounded-lg transition-all duration-300
               ${agentStates[blob.id].active ? 'border-4 border-emerald-500 shadow-lg shadow-emerald-200' : 'border-4 border-transparent'}`}>

@@ -12,7 +12,6 @@ import { FiMenu, FiSend } from 'react-icons/fi';
 import Header from '../components/Header';
 import AvatarGrid from '../components/AvatarGrid';
 import { Link } from "@heroui/link";
-import { useRouter } from 'next/router';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -76,6 +75,8 @@ function ChatComponent() {
     // Add state for chat history drawer
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
+    // Add new state for active agent
+    const [activeAgent, setActiveAgent] = useState(null);
     // Add this mapping near the top of the ChatComponent function
     const agentAvatars = {
         finn: '/ai-avatars/finn.png',
@@ -85,20 +86,8 @@ function ChatComponent() {
         system: '/ai-avatars/system.png'
     };
 
-    const router = useRouter();
-
-    // Handle initial message from query params
-    useEffect(() => {
-        const initialMessage = router.query.message;
-        if (initialMessage && messages.length === 0) {
-            // Add the initial message and trigger the chat
-            setInput(initialMessage);
-            // We need to wait for the next tick to ensure all setup is complete
-            setTimeout(() => {
-                handleSendMessage();
-            }, 0);
-        }
-    }, [router.query.message]);
+    // Add new state for proof loading at component level
+    const [proofLoadingStates, setProofLoadingStates] = useState({});
 
     // Add this effect at the top level of your component
     useEffect(() => {
@@ -333,7 +322,7 @@ function ChatComponent() {
 
             const messageData = {
                 role,
-                content: { $allot: encryptedContent }, // Store encrypted content
+                content: { $allot: encryptedContent },
                 agent,
                 timestamp,
                 chatId: currentChatId || timestamp.toString()
@@ -349,10 +338,8 @@ function ChatComponent() {
                 }),
             });
 
-            // Update error handling
             if (!response.ok) {
                 console.error('Store error:', response.status);
-                // Continue with local updates even if storage fails
             }
             
             // Update local state immediately
@@ -372,12 +359,30 @@ function ChatComponent() {
             }
 
             console.log('💾 Message stored successfully');
+
+            // Update active agent when AI responds
+            if (agent) {
+                const agentMap = {
+                    'Finn': 'finder',
+                    'Codey': 'creator',
+                    'Dex': 'developer',
+                    'Vee': 'verifier'
+                };
+                setActiveAgent(agentMap[agent]);
+                
+                // Wait for message to be processed before resetting agent
+                await new Promise(resolve => setTimeout(resolve, 100));
+                setActiveAgent(null);
+            }
+
             return messageData.chatId;
         } catch (error) {
             console.error('Message error:', error);
             // Still update local state even if there's an error
             const newMessage = { role, content, agent, timestamp: Date.now() };
             setMessages(prev => [...prev, newMessage]);
+            // Ensure agent is reset even on error
+            setActiveAgent(null);
             throw error;
         }
     };
@@ -631,23 +636,18 @@ function ChatComponent() {
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
                             addMessage('assistant', 
-                                <div className="flex items-center gap-2">
-                                    Contract verified! 
-                                    <Link 
-                                        href={verifyData.explorerUrl}
-                                        isExternal
-                                        showAnchorIcon
-                                        color="primary"
-                                        size="sm"
-                                    >
-                                        View on FlowScan
-                                    </Link>
-                                    <span className="text-blue-500 hover:text-blue-600 text-sm cursor-pointer">
-                                        (proof on chain)
-                                    </span>
-                                </div>, 
+                                <Link 
+                                    href={verifyData.explorerUrl}
+                                    isExternal
+                                    showAnchorIcon
+                                    color="primary"
+                                    className="hover:opacity-70"
+                                >
+                                    View on Explorer
+                                </Link>, 
                                 'Codey'
                             );
+                            addMessage('system', 'Do you want to generate a proof of execution on chain?', 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
@@ -877,6 +877,67 @@ function ChatComponent() {
         });
     };
 
+    // Modify the proof generation section to use a separate function instead:
+    const handleGenerateProof = async (messageTimestamp) => {
+        if (!signer) {
+            console.error('No signer available');
+            return;
+        }
+        
+        setProofLoadingStates(prev => ({ ...prev, [messageTimestamp]: true }));
+        try {
+            // Create provider and contract instances
+            const provider = new ethers.JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+            const contract = new ethers.Contract(contractAddress, abi, provider);
+
+            // Initialize AI wallet for signing
+            if (!process.env.NEXT_PUBLIC_AI_PRIVATE_KEY) {
+                throw new Error('AI private key not configured');
+            }
+            const aiWallet = new ethers.Wallet(process.env.NEXT_PUBLIC_AI_PRIVATE_KEY, provider);
+
+            // Convert messages array to string
+            const chatContent = messages
+                .map(msg => `${msg.role}: ${msg.content}`)
+                .join('\n');
+            
+            // Create hash of content
+            const hashBeforeSign = ethers.keccak256(ethers.toUtf8Bytes(chatContent));
+            console.log('Hash before sign:', hashBeforeSign);
+
+            // Get AI signature
+            const messageBytes = ethers.getBytes(hashBeforeSign);
+            const signature = await aiWallet.signMessage(messageBytes);
+            console.log('AI Signature:', signature);
+
+            // Create contract instance with signer
+            const contractWithSigner = contract.connect(signer);
+
+            // Submit task with encoded data
+            const tx = await contractWithSigner.createNewTask(
+                hashBeforeSign,
+                signature,
+                {
+                    gasLimit: 500000
+                }
+            );
+
+            console.log('Transaction sent:', tx.hash);
+            const receipt = await tx.wait();
+            console.log('Transaction receipt:', receipt);
+
+            handleTransactionComplete({
+                createTaskHash: tx.hash,
+                responseHash: tx.hash
+            });
+        } catch (error) {
+            console.error('Proof generation error:', error);
+            setError(error.message);
+        } finally {
+            setProofLoadingStates(prev => ({ ...prev, [messageTimestamp]: false }));
+        }
+    };
+
     return (
         <div className="flex flex-col h-screen">
             {/* Header spans full width */}
@@ -884,7 +945,7 @@ function ChatComponent() {
             
             <div className="flex flex-1 overflow-hidden">
                 {/* Left side - Avatar Grid */}
-                <AvatarGrid />
+                <AvatarGrid activeAgent={activeAgent} />
 
                 {/* Right side - Chat Interface */}
                 <div className="w-1/2 flex flex-col">
@@ -901,7 +962,7 @@ function ChatComponent() {
                                         <FiMenu size={24} className={!isConnected ? 'text-gray-400' : ''} />
                                     </button>
                                 </DropdownTrigger>
-                                <DropdownMenu aria-label="Model Selection">
+                                <DropdownMenu>
                                     {!isConnected ? (
                                         <DropdownItem>
                                             <div className="text-gray-500">
@@ -991,84 +1052,65 @@ function ChatComponent() {
                     </div>
 
                     {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto flex flex-col p-6 space-y-4">
+                    <div className="flex-1 overflow-y-auto p-6">
                         {messages.map((message, index) => (
                             <div
                                 key={index}
-                                className={`transition-all duration-200 ease-in-out ${
-                                    message.role === 'user' ? 'ml-auto max-w-[75%]' : 'mr-auto max-w-[75%] w-full'
+                                className={`flex ${
+                                    message.role === 'user' ? 'justify-end mb-4' : 'mb-4'
                                 }`}
                             >
-                                {message.role === 'user' ? (
-                                    <div className="bg-blue-500 text-white rounded-lg p-3">
-                                        {message.content}
-                                    </div>
-                                ) : (
-                                    <div className="flex items-start gap-3">
-                                        <div className="flex-shrink-0 text-center">
-                                            <img 
-                                                src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
-                                                alt={message.agent || 'Finn'}
-                                                className="w-8 h-8 rounded-full border-2 border-black"
-                                            />
-                                            <div className="text-sm font-medium text-gray-600 mt-1">
-                                                {message.agent || 'Finn'}
+                                <div className={`${
+                                    message.role === 'user' ? 'ml-auto' : 'mr-auto'
+                                } max-w-[80%]`}>
+                                    {message.role === 'user' ? (
+                                        <div className="bg-blue-500 text-white rounded-lg p-3">
+                                            <div className="break-words">
+                                                {message.content}
                                             </div>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="bg-gray-100 rounded-lg p-3">
-                                                <div className="break-words">
-                                                    {typeof message.content === 'string' ? 
-                                                        message.content.replace(/\.\.\./g, '…')
-                                                        .split(/(?<=[.!?])\s+/)
-                                                        .filter(Boolean)
-                                                        .join(' ')
-                                                        : message.content
-                                                    }
+                                    ) : (
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex-shrink-0 text-center">
+                                                <img 
+                                                    src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
+                                                    alt={message.agent || 'Finn'}
+                                                    className="w-8 h-8 rounded-full"
+                                                />
+                                                <div className="text-sm font-medium text-gray-600 mt-1">
+                                                    {message.agent || 'Finn'}
                                                 </div>
                                             </div>
-                                            {message.proof && (
-                                                <div className="mt-1">
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsProofLoading(prev => ({ ...prev, [index]: true }));
-                                                            const proofComponent = (
-                                                                <OnChainProof 
-                                                                    messages={messages} 
-                                                                    signer={signer}
-                                                                    setIsGeneratingProof={setIsGeneratingProof}
-                                                                    onComplete={() => {
-                                                                        setIsProofLoading(prev => ({ ...prev, [index]: false }));
-                                                                    }}
-                                                                />
-                                                            );
-                                                            proofComponent.props.onClick?.();
-                                                        }}
-                                                        disabled={isProofLoading[index]}
-                                                        className="text-blue-500 hover:text-blue-600 text-sm flex items-center gap-1"
-                                                    >
-                                                        {isProofLoading[index] ? (
-                                                            <>
-                                                                <svg className="animate-spin h-4 w-4 mr-1" viewBox="0 0 24 24">
-                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                                </svg>
-                                                                Generating proof...
-                                                            </>
-                                                        ) : (
-                                                            'Proof on chain'
-                                                        )}
-                                                    </button>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="bg-gray-100 rounded-lg p-3">
+                                                    <div className="break-words">
+                                                        {typeof message.content === 'string' ? 
+                                                            message.content.replace(/\.\.\./g, '…')
+                                                            .split(/(?<=[.!?])\s+/)
+                                                            .filter(Boolean)
+                                                            .join(' ')
+                                                            : message.content
+                                                        }
+                                                    </div>
                                                 </div>
-                                            )}
+                                                {message.content === 'Do you want to generate a proof of execution on chain?' && (
+                                                    <div className="mt-2">
+                                                        <OnChainProof 
+                                                            messages={messages.filter(m => m.content !== 'Do you want to generate a proof of execution on chain?')} 
+                                                            signer={signer}
+                                                            onTransactionComplete={handleTransactionComplete}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
                     
-                    {/* Chat Input */}
+                    {/* Chat Input - Keep existing code */}
                     <div className="p-4 border-t">
                         <div className="flex items-end gap-2">
                             <Textarea
@@ -1083,33 +1125,14 @@ function ChatComponent() {
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={!input.trim() || !isConnected}
+                                disabled={isLoading || !input.trim() || !isConnected}
                                 className={`p-3 rounded-full ${
                                     !isConnected 
                                         ? 'bg-gray-300 cursor-not-allowed' 
                                         : 'bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300'
                                 } text-white`}
                             >
-                                {isLoading ? (
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                        <circle 
-                                            className="opacity-25" 
-                                            cx="12" 
-                                            cy="12" 
-                                            r="10" 
-                                            stroke="currentColor" 
-                                            strokeWidth="4" 
-                                            fill="none" 
-                                        />
-                                        <path 
-                                            className="opacity-75" 
-                                            fill="currentColor" 
-                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                        />
-                                    </svg>
-                                ) : (
-                                    <FiSend size={20} />
-                                )}
+                                <FiSend size={20} />
                             </button>
                         </div>
                     </div>
@@ -1118,26 +1141,38 @@ function ChatComponent() {
 
             {/* Transaction Popup */}
             {txPopup && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-                        <h3 className="text-lg font-bold mb-4">Transactions Complete!</h3>
-                        <div className="space-y-2">
-                            <p>Task Creation: <a 
-                                href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 underline"
-                            >{txPopup.createTaskHash}</a></p>
-                            <p>Operator Response: <a 
-                                href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 underline"
-                            >{txPopup.responseHash}</a></p>
+                        <h3 className="text-lg font-bold mb-4">Verified on Chain! 🎉</h3>
+                        <div className="space-y-3">
+                            <div>
+                                <p className="text-gray-600 mb-1">Task Creation:</p>
+                                <Link 
+                                    href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
+                                    isExternal
+                                    showAnchorIcon
+                                    color="primary"
+                                    className="hover:opacity-70"
+                                >
+                                    View on Explorer
+                                </Link>
+                            </div>
+                            <div>
+                                <p className="text-gray-600 mb-1">Operator Response:</p>
+                                <Link 
+                                    href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
+                                    isExternal
+                                    showAnchorIcon
+                                    color="primary"
+                                    className="hover:opacity-70"
+                                >
+                                    View on Explorer
+                                </Link>
+                            </div>
                         </div>
                         <button 
                             onClick={() => setTxPopup(null)}
-                            className="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                            className="mt-6 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
                         >
                             Close
                         </button>

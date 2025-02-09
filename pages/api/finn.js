@@ -40,18 +40,18 @@ async function generateTeamResponse(intent, message, contractDetails, selectedMo
         const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
         if (addressMatch) {
             const contractAddress = addressMatch[0];
-            return `Finn: Connected to contract ${contractAddress}. Passing to Vee for analysis...`;
+            return `Connected to contract ${contractAddress}. Passing to Vee for analysis...`;
         }
 
         const response = await createChatCompletion(selectedModel, [
             {
                 role: "system",
-                content: `You are ${aiTeam.finn.name}, the team coordinator of an AI system.
+                content: `You are the team coordinator of an AI system.
                 Your team members are:
-                - ${aiTeam.codey.name}: Creates and deploys smart contracts
-                - ${aiTeam.vee.name}: Identifies contract functions
-                - ${aiTeam.dex.name}: Extracts function parameters
-                - ${aiTeam.guard.name}: Monitors security
+                - Codey: Creates and deploys smart contracts
+                - Vee: Identifies contract functions
+                - Dex: Extracts function parameters
+                - Guard: Monitors security
                 
                 When users describe desired functionality (like transfers with PINs, 
                 time locks, or security features), direct to Codey for contract creation.
@@ -64,7 +64,7 @@ async function generateTeamResponse(intent, message, contractDetails, selectedMo
                 Contract Status: ${contractDetails ? 'Connected' : 'Not Connected'}
                 Contract Address: ${contractDetails?.address || 'None'}
                 
-                IMPORTANT: Start with "Finn:" and keep it under 2 sentences.`
+                IMPORTANT: Keep responses under 2 sentences.`
             },
             {
                 role: "user",
@@ -76,12 +76,11 @@ async function generateTeamResponse(intent, message, contractDetails, selectedMo
             ? response.choices[0].message.content
             : response.choices[0].message.content;
             
-        if (!responseText.startsWith('Finn:')) {
-            responseText = `Finn: ${responseText}`;
-        }
+        // Remove any "Finn:", "Guardian:", etc. prefixes
+        responseText = responseText.replace(/^(Finn|Guardian|System):\s*/i, '');
         return responseText;
     } catch (error) {
-        return `Finn: Directing this to Codey to create a secure contract with your specified requirements!`;
+        return `Directing this to Codey to create a secure contract with your specified requirements!`;
     }
 }
 

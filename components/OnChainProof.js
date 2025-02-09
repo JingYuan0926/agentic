@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
 
 // ABI matching exactly with respondToTask.js
 const abi = [
@@ -12,75 +13,29 @@ const abi = [
 ];
 
 const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
-const HOLESKY_CHAIN_ID = '0x4268'; // Chain ID for Holesky
 
-export default function OnChainProof({ messages, signer, onTransactionComplete, setIsGeneratingProof }) {
+export default function OnChainProof({ messages, signer, onTransactionComplete }) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
-
-    // Add network check effect
-    useEffect(() => {
-        const checkNetwork = async () => {
-            if (window.ethereum && signer) {
-                const network = await window.ethereum.request({ method: 'eth_chainId' });
-                setIsCorrectNetwork(network === HOLESKY_CHAIN_ID);
-            }
-        };
-        checkNetwork();
-    }, [signer]);
-
-    const switchToHolesky = async () => {
-        try {
-            await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: HOLESKY_CHAIN_ID }],
-            });
-            setIsCorrectNetwork(true);
-        } catch (switchError) {
-            if (switchError.code === 4902) {
-                try {
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [{
-                            chainId: HOLESKY_CHAIN_ID,
-                            chainName: 'Holesky Testnet',
-                            nativeCurrency: {
-                                name: 'ETH',
-                                symbol: 'ETH',
-                                decimals: 18
-                            },
-                            rpcUrls: ['https://ethereum-holesky.publicnode.com'],
-                            blockExplorerUrls: ['https://holesky.etherscan.io']
-                        }]
-                    });
-                    setIsCorrectNetwork(true);
-                } catch (addError) {
-                    throw addError;
-                }
-            } else {
-                throw switchError;
-            }
-        }
-    };
+    const { switchToHolesky } = useNetworkSwitch();
 
     const generateProof = async () => {
+        if (!signer) {
+            setError('Please connect your wallet first');
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
-        setIsGeneratingProof(true);
         
         try {
-            if (!signer) {
-                throw new Error('Please connect your wallet first');
+            // Switch to Holesky network
+            const { provider, signer: holeskySigner } = await switchToHolesky();
+            if (!provider || !holeskySigner) {
+                throw new Error('Failed to switch to Holesky network');
             }
 
-            // Automatically switch network if needed
-            if (!isCorrectNetwork) {
-                await switchToHolesky();
-            }
-
-            // Create provider and contract instances
-            const provider = new ethers.JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+            // Create contract instance
             const contract = new ethers.Contract(contractAddress, abi, provider);
 
             // Initialize AI wallet for signing
@@ -104,31 +59,18 @@ export default function OnChainProof({ messages, signer, onTransactionComplete, 
             console.log('AI Signature:', signature);
 
             // Create contract instance with signer
-            const contractWithSigner = contract.connect(signer);
+            const contractWithSigner = contract.connect(holeskySigner);
 
-            // Encode function data for createNewTask
-            const data = contract.interface.encodeFunctionData('createNewTask', [
-                hashBeforeSign,
-                signature
-            ]);
-            console.log('Encoded function data:', data);
-
-            // Submit task with encoded data
+            // Submit task
             const tx = await contractWithSigner.createNewTask(
                 hashBeforeSign,
                 signature,
-                {
-                    gasLimit: 500000
-                }
+                { gasLimit: 500000 }
             );
 
             console.log('Transaction sent:', tx.hash);
             const receipt = await tx.wait();
             console.log('Transaction receipt:', receipt);
-
-            if (receipt.status === 0) {
-                throw new Error('Transaction failed');
-            }
 
             // Get task index from event
             const event = receipt.logs
@@ -173,18 +115,12 @@ export default function OnChainProof({ messages, signer, onTransactionComplete, 
                 taskIndex,
                 "Verified",
                 operatorSignature,
-                {
-                    gasLimit: 500000
-                }
+                { gasLimit: 500000 }
             );
 
             console.log('Response transaction sent:', responseTx.hash);
             const responseReceipt = await responseTx.wait();
             console.log('Response receipt:', responseReceipt);
-
-            if (responseReceipt.status === 0) {
-                throw new Error('Response transaction failed');
-            }
 
             // Call the callback with transaction data
             if (onTransactionComplete) {
@@ -197,27 +133,41 @@ export default function OnChainProof({ messages, signer, onTransactionComplete, 
         } catch (error) {
             console.error('Error:', error);
             setError(error.message);
-            if (error.data) {
-                console.error('Error data:', error.data);
-            }
-            if (error.transaction) {
-                console.error('Transaction:', error.transaction);
-            }
         } finally {
             setIsLoading(false);
-            setIsGeneratingProof(false);
         }
     };
 
     return (
-        <button
-            onClick={generateProof}
-            disabled={isLoading || !messages.length || !signer}
-            className={`text-green-500 hover:text-green-600 text-sm transition-colors ${
-                isLoading || !signer ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-        >
-            {!signer ? 'Connect Wallet First' : isLoading ? 'Generating...' : 'Proof on Chain'}
-        </button>
+        <div className="mt-4">
+            <button
+                onClick={generateProof}
+                disabled={isLoading || !messages.length || !signer}
+                className={`w-full px-4 py-2 rounded ${
+                    isLoading || !signer || !messages.length
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-500 hover:bg-green-600'
+                } text-white transition-colors flex items-center justify-center gap-2`}
+            >
+                {isLoading ? (
+                    <>
+                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Generating Proof...</span>
+                    </>
+                ) : !signer ? (
+                    'Connect Wallet First'
+                ) : !messages.length ? (
+                    'No Messages to Prove'
+                ) : (
+                    'Generate On-Chain Proof'
+                )}
+            </button>
+            {error && (
+                <p className="text-red-500 text-sm mt-2">{error}</p>
+            )}
+        </div>
     );
 } 
