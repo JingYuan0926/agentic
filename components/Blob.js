@@ -4,7 +4,7 @@ import fragmentShader from "./fragmentShader";
 import { useFrame } from "@react-three/fiber";
 import { MathUtils } from "three";
 
-const Blob = ({ shape = 'sphere', isActive = false }) => {
+const Blob = ({ shape = 'sphere', isActive = false, scale = 1.5 }) => {
   const mesh = useRef();
   const uniforms = useMemo(() => {
     return {
@@ -56,7 +56,7 @@ const Blob = ({ shape = 'sphere', isActive = false }) => {
   return (
     <mesh
       ref={mesh}
-      scale={0.8}
+      scale={scale}
       position={[0, 0, 0]}
     >
       {getGeometry()}

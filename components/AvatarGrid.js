@@ -1,6 +1,15 @@
 import React from 'react';
+import { Canvas } from '@react-three/fiber';
+import Blob from './Blob';
 
 export default function AvatarGrid() {
+  const blobs = [
+    { shape: 'sphere', position: 'top-left', name: 'Finn the Finder' },
+    { shape: 'dna', position: 'top-right', name: 'Cody the Creator' },
+    { shape: 'diamond', position: 'bottom-left', name: 'Dex the Developer' },
+    { shape: 'torus', position: 'bottom-right', name: 'Vee the Verifier' }
+  ];
+
   return (
     <div className="w-1/2 relative flex items-center justify-center bg-white">
       {/* Full screen cross lines */}
@@ -13,11 +22,21 @@ export default function AvatarGrid() {
 
       {/* Grid container */}
       <div className="w-full h-full grid grid-cols-2 grid-rows-2">
-        {/* User Avatar Boxes - 4 identical boxes */}
-        {[...Array(4)].map((_, index) => (
-          <div key={index} className="flex flex-col items-center justify-center">
-            <div className="w-32 h-32 bg-black rounded-full mb-3"></div>
-            <div className="w-40 h-16 bg-black rounded-t-full"></div>
+        {blobs.map((blob, index) => (
+          <div key={index} className="relative w-full h-full p-8 flex flex-col items-center">
+            <div className="flex-1 w-full">
+              <Canvas 
+                camera={{ position: [0, 0, 3.5] }}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <ambientLight intensity={0.5} />
+                <pointLight position={[10, 10, 10]} />
+                <Blob shape={blob.shape} isActive={false} scale={1.2} />
+              </Canvas>
+            </div>
+            <div className="text-center mt-2 text-lg font-semibold text-gray-800">
+              {blob.name}
+            </div>
           </div>
         ))}
       </div>
