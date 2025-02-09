@@ -1,40 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# 4AI 1 Human: A Customizable Agentic Smart Wallet
 
-## Getting Started
+A customizable, AI-driven wallet that lets you send funds with the exact requirements you choose or manage any transaction the way you envision. Simply use MetaMask, and whatever you imagine, our wallet will make it happen.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Inspiration: How We Came Up with This Idea
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+One of our friends needed funds to stake in an ETHGlobal agentic hackathon. We sent her some ETH, but it disappeared immediately as her private key was compromised. This incident highlighted a serious gap: there was no easy way to control **how** the funds were used or to retrieve them if misused.
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+We thought:
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+> *“What if we could tell an AI, in plain language, exactly how we want our funds handled—like ‘Send 0.2 ETH to Alice, but only for staking in ETHGlobal; otherwise, return it’ and have the wallet automatically enforce these conditions?”*
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+That sparked the idea of a **Customizable Agentic Smart Wallet**, you simply describe the rules (time locks, passwords, usage restrictions, or refunds if conditions aren’t met), and the wallet takes care of the rest. No manual coding. No guesswork. The only limitation is your imagination.
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## The Problem
 
-To learn more about Next.js, take a look at the following resources:
+Traditional wallets (EOAs) and payment flows handle only **basic transfers**, lacking native support for:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+1. **Usage Restrictions** (e.g., “You must stake in a specific contract.”)  
+2. **Conditional Withdrawals** (e.g., “Only allowed after a certain event or time.”)  
+3. **Advanced Fund Management** (e.g., multi-sig approvals, milestone payouts.)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Essentially, when using MetaMask to send funds, you can’t impose custom requirements. Users who want these features end up writing their own code, relying on complex escrow services, or risking misuse of funds. Meanwhile, many AI-based wallet solutions focus on **standard transfers** only—they don’t allow you to truly customize how (or why) funds move.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+**Our AI Smart Wallet changes that**: just **tell** the AI your desired conditions, and it will **enforce** them automatically—no advanced coding required.
