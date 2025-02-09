@@ -1,39 +1,51 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A shared counter contract
-/// @notice This contract allows users to increment or decrement a shared counter
+/// @title A simple contract for password-protected fund transfers
+/// @notice This contract allows users to transfer Ether to a friend with password protection for withdrawal
 contract Contract {
-    uint256 private counter; // The shared counter
+    bytes32 private passwordHash;
+    address private owner;
+    mapping(address => uint256) private balances;
 
-    /// @dev Emitted when the counter is incremented
-    event CounterIncremented(uint256 newCounter);
+    event FundsTransferred(address indexed to, uint256 amount);
+    event FundsWithdrawn(address indexed to, uint256 amount);
 
-    /// @dev Emitted when the counter is decremented
-    event CounterDecremented(uint256 newCounter);
-
-    /// @notice Initializes the counter to zero
+    /// @notice Initializes the contract and sets the password
     constructor() {
-        counter = 0;
+        owner = msg.sender;
+        passwordHash = keccak256(abi.encodePacked("0000"));
     }
 
-    /// @notice Increment the counter by 1
-    function increment() external {
-        counter += 1;
-        emit CounterIncremented(counter);
+    /// @notice Transfers Ether to a specified address
+    /// @param _to The address of the friend to receive the funds
+    /// @param _amount The amount of Ether to transfer
+    function transferFunds(address payable _to, uint256 _amount) external payable {
+        require(msg.value == _amount, "Sent value must match the amount specified");
+        require(_to != address(0), "Invalid address");
+
+        balances[_to] += _amount;
+        emit FundsTransferred(_to, _amount);
     }
 
-    /// @notice Decrement the counter by 1
-    /// @dev Requires the counter to be greater than zero to avoid underflow
-    function decrement() external {
-        require(counter > 0, "Counter cannot be negative");
-        counter -= 1;
-        emit CounterDecremented(counter);
+    /// @notice Withdraws funds for the specified address after password verification
+    /// @param _password The password to verify
+    function withdrawFunds(string calldata _password) external {
+        require(balances[msg.sender] > 0, "No funds available for withdrawal");
+        require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
+
+        uint256 amount = balances[msg.sender];
+        balances[msg.sender] = 0;
+
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
+
+        emit FundsWithdrawn(msg.sender, amount);
     }
 
-    /// @notice Returns the current value of the counter
-    /// @return The current counter value
-    function getCounter() external view returns (uint256) {
-        return counter;
+    /// @notice Returns the balance of the sender
+    /// @return The balance of the caller
+    function getBalance() external view returns (uint256) {
+        return balances[msg.sender];
     }
 }

@@ -7,6 +7,7 @@ import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
 import OnChainProof from '../components/OnChainProof';
+import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -57,6 +58,9 @@ function ChatComponent() {
 
     // Add new state for transaction popup
     const [txPopup, setTxPopup] = useState(null);
+
+    // Add network switch state
+    const { switchToFlow } = useNetworkSwitch();
 
     // Handle client-side initialization
     useEffect(() => {
@@ -777,6 +781,19 @@ function ChatComponent() {
             responseHash: txData.responseHash
         });
     };
+
+    // Add new useEffect for network switching
+    useEffect(() => {
+        const checkAndSwitchNetwork = async () => {
+            if (window.ethereum && signer) {
+                const network = await window.ethereum.request({ method: 'eth_chainId' });
+                if (network !== '0xc45') { // If not on Flow
+                    await switchToFlow().catch(console.error);
+                }
+            }
+        };
+        checkAndSwitchNetwork();
+    }, [signer]);
 
     return (
         <div className="flex flex-col h-screen">

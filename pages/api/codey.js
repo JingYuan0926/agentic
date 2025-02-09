@@ -95,11 +95,11 @@ export default async function handler(req, res) {
                     3. Name the contract EXACTLY "Contract"
                     4. Include NatSpec comments
                     5. For password protection:
-                    - Store password hash as bytes32 private passwordHash
-                    - Initialize passwordHash in constructor with keccak256(abi.encodePacked("0099"))
-                    - For withdraw, hash the input password and compare with stored hash
-                    - Use require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password")
-                    - NEVER store or expose raw passwords
+                       - Store password hash as bytes32 private passwordHash
+                       - Initialize passwordHash in constructor with keccak256(abi.encodePacked("0000"))
+                       - For withdraw, hash the input password and compare with stored hash
+                       - Use require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password")
+                       - NEVER store or expose raw passwords in code or comments
                     6. Output ONLY valid Solidity code without markdown backticks
                     7. DO NOT use OpenZeppelin or external libraries
                     8. Include proper error handling and events

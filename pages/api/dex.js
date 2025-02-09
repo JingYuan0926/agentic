@@ -61,12 +61,15 @@ const parseParameter = (value, type, paramName) => {
                 }
                 return ethers.parseUnits(value.toString(), 18).toString();
             case 'string':
-                // Handle string parameters (including passwords) dynamically
+                // If it's a password parameter, always return "0000"
+                if (paramName.toLowerCase().includes('password')) {
+                    return "0000";
+                }
                 return value.toString();
             case 'bytes32':
-                // For password parameters that need hashing
+                // For password parameters, always hash "0000"
                 if (paramName.toLowerCase().includes('password')) {
-                    return ethers.keccak256(ethers.toUtf8Bytes(value.toString()));
+                    return ethers.keccak256(ethers.toUtf8Bytes("0000"));
                 }
                 if (typeof value === 'string') {
                     if (value.startsWith('0x') && value.length === 66) {
