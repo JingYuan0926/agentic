@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // ABI matching exactly with respondToTask.js
 const abi = [
@@ -14,9 +14,21 @@ const abi = [
 const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
 const HOLESKY_CHAIN_ID = '0x4268'; // Chain ID for Holesky
 
-export default function OnChainProof({ messages, signer, onTransactionComplete }) {
+export default function OnChainProof({ messages, signer, onTransactionComplete, setIsGeneratingProof }) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
+
+    // Add network check effect
+    useEffect(() => {
+        const checkNetwork = async () => {
+            if (window.ethereum && signer) {
+                const network = await window.ethereum.request({ method: 'eth_chainId' });
+                setIsCorrectNetwork(network === HOLESKY_CHAIN_ID);
+            }
+        };
+        checkNetwork();
+    }, [signer]);
 
     const switchToHolesky = async () => {
         try {
@@ -24,23 +36,28 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: HOLESKY_CHAIN_ID }],
             });
+            setIsCorrectNetwork(true);
         } catch (switchError) {
-            // This error code means the chain hasn't been added to MetaMask
             if (switchError.code === 4902) {
-                await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [{
-                        chainId: HOLESKY_CHAIN_ID,
-                        chainName: 'Holesky Testnet',
-                        nativeCurrency: {
-                            name: 'ETH',
-                            symbol: 'ETH',
-                            decimals: 18
-                        },
-                        rpcUrls: ['https://ethereum-holesky.publicnode.com'],
-                        blockExplorerUrls: ['https://holesky.etherscan.io']
-                    }]
-                });
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: HOLESKY_CHAIN_ID,
+                            chainName: 'Holesky Testnet',
+                            nativeCurrency: {
+                                name: 'ETH',
+                                symbol: 'ETH',
+                                decimals: 18
+                            },
+                            rpcUrls: ['https://ethereum-holesky.publicnode.com'],
+                            blockExplorerUrls: ['https://holesky.etherscan.io']
+                        }]
+                    });
+                    setIsCorrectNetwork(true);
+                } catch (addError) {
+                    throw addError;
+                }
             } else {
                 throw switchError;
             }
@@ -50,10 +67,16 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
     const generateProof = async () => {
         setIsLoading(true);
         setError(null);
+        setIsGeneratingProof(true);
         
         try {
             if (!signer) {
                 throw new Error('Please connect your wallet first');
+            }
+
+            // Automatically switch network if needed
+            if (!isCorrectNetwork) {
+                await switchToHolesky();
             }
 
             // Create provider and contract instances
@@ -182,6 +205,7 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
             }
         } finally {
             setIsLoading(false);
+            setIsGeneratingProof(false);
         }
     };
 

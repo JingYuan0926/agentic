@@ -1,12 +1,5 @@
-import OpenAI from 'openai';
+import { createChatCompletion } from '../../utils/aiConfig';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
-
-const personalityAI = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
 
 // AI Team Configuration
 const aiTeam = {
@@ -41,7 +34,7 @@ const aiTeam = {
     }
 };
 
-async function generateTeamResponse(intent, message, contractDetails) {
+async function generateTeamResponse(intent, message, contractDetails, selectedModel) {
     try {
         // Check for contract address in message
         const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
@@ -50,41 +43,39 @@ async function generateTeamResponse(intent, message, contractDetails) {
             return `Finn: Connected to contract ${contractAddress}. Passing to Vee for analysis...`;
         }
 
-        const response = await personalityAI.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are ${aiTeam.finn.name}, the team coordinator of an AI system.
-                    Your team members are:
-                    - ${aiTeam.codey.name}: Creates and deploys smart contracts
-                    - ${aiTeam.vee.name}: Identifies contract functions
-                    - ${aiTeam.dex.name}: Extracts function parameters
-                    - ${aiTeam.guard.name}: Monitors security
-                    
-                    When users describe desired functionality (like transfers with PINs, 
-                    time locks, or security features), direct to Codey for contract creation.
-                    
-                    Based on the intent "${intent}" and contract status, coordinate the team:
-                    - For "generate": Direct to Codey and mention the specific feature to be implemented
-                    - For "connect": Direct to Vee and Dex for contract interaction
-                    - For "invalid": Guide the user appropriately
-                    
-                    Contract Status: ${contractDetails ? 'Connected' : 'Not Connected'}
-                    Contract Address: ${contractDetails?.address || 'None'}
-                    
-                    IMPORTANT: Start with "Finn:" and keep it under 2 sentences.`
-                },
-                {
-                    role: "user",
-                    content: `User message: ${message}\nIntent: ${intent}`
-                }
-            ],
-            max_tokens: 100,
-            temperature: 0.7
-        });
+        const response = await createChatCompletion(selectedModel, [
+            {
+                role: "system",
+                content: `You are ${aiTeam.finn.name}, the team coordinator of an AI system.
+                Your team members are:
+                - ${aiTeam.codey.name}: Creates and deploys smart contracts
+                - ${aiTeam.vee.name}: Identifies contract functions
+                - ${aiTeam.dex.name}: Extracts function parameters
+                - ${aiTeam.guard.name}: Monitors security
+                
+                When users describe desired functionality (like transfers with PINs, 
+                time locks, or security features), direct to Codey for contract creation.
+                
+                Based on the intent "${intent}" and contract status, coordinate the team:
+                - For "generate": Direct to Codey and mention the specific feature to be implemented
+                - For "connect": Direct to Vee and Dex for contract interaction
+                - For "invalid": Guide the user appropriately
+                
+                Contract Status: ${contractDetails ? 'Connected' : 'Not Connected'}
+                Contract Address: ${contractDetails?.address || 'None'}
+                
+                IMPORTANT: Start with "Finn:" and keep it under 2 sentences.`
+            },
+            {
+                role: "user",
+                content: `User message: ${message}\nIntent: ${intent}`
+            }
+        ], { max_tokens: 100, temperature: 0.7 });
 
-        let responseText = response.choices[0].message.content;
+        let responseText = selectedModel === 'openai' 
+            ? response.choices[0].message.content
+            : response.choices[0].message.content;
+            
         if (!responseText.startsWith('Finn:')) {
             responseText = `Finn: ${responseText}`;
         }
@@ -100,13 +91,13 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { message, contractDetails, isConnected } = req.body;
+        const { message, contractDetails, isConnected, selectedModel } = req.body;
 
         // Check if message contains contract address
         const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
         if (addressMatch) {
             const contractAddress = addressMatch[0];
-            const teamResponse = await generateTeamResponse('connect', message, contractDetails);
+            const teamResponse = await generateTeamResponse('connect', message, contractDetails, selectedModel);
             
             return res.status(200).json({
                 intent: 'connect',
@@ -119,30 +110,27 @@ export default async function handler(req, res) {
 
         // If already connected, only check for generate intent, otherwise pass to Vee
         if (isConnected) {
-            const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [
-                    {
-                        role: 'system',
-                        content: `Classify user intentions:
-                        1. "generate" - Create new contract
-                        2. "interact" - Use existing contract
-                        
-                        Respond ONLY with one of these words.`
-                    },
-                    {
-                        role: 'user',
-                        content: message
-                    }
-                ],
-                max_tokens: 10,
-                temperature: 0
-            });
+            const response = await createChatCompletion(selectedModel, [
+                {
+                    role: 'system',
+                    content: `Classify user intentions:
+                    1. "generate" - Create new contract
+                    2. "interact" - Use existing contract
+                    
+                    Respond ONLY with one of these words.`
+                },
+                {
+                    role: 'user',
+                    content: message
+                }
+            ], { max_tokens: 10, temperature: 0 });
 
-            const intent = response.choices[0].message.content.trim().toLowerCase();
+            const intent = selectedModel === 'openai' 
+                ? response.choices[0].message.content.trim().toLowerCase()
+                : response.choices[0].message.content.trim().toLowerCase();
 
             if (intent === 'generate') {
-                const teamResponse = await generateTeamResponse(intent, message, contractDetails);
+                const teamResponse = await generateTeamResponse(intent, message, contractDetails, selectedModel);
                 return res.status(200).json({
                     intent: 'generate',
                     teamResponse,
@@ -161,42 +149,40 @@ export default async function handler(req, res) {
         }
 
         // Original flow for non-connected state
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: 'system',
-                    content: `Classify user intentions for smart contract interactions:
-                    1. "generate" - Any of these cases:
-                       - Explicit contract creation requests
-                       - Descriptions of desired contract functionality
-                       - Security or access control requirements
-                       - Transfer with conditions
-                       - Funds with password/PIN protection
-                       - Time-locked transfers
-                       - Custom payment flows
-                       - Any functionality that would require a new contract
-                    2. "invalid" - Completely unrelated or unclear requests
-                    
-                    Examples:
-                    - "I want to transfer with a password" -> "generate"
-                    - "Create a contract for secure transfers" -> "generate"
-                    - "I need funds to be PIN protected" -> "generate"
-                    - "What's the weather?" -> "invalid"
-                    
-                    Respond ONLY with one of these words.`
-                },
-                {
-                    role: 'user',
-                    content: message
-                }
-            ],
-            max_tokens: 10,
-            temperature: 0
-        });
+        const response = await createChatCompletion(selectedModel, [
+            {
+                role: 'system',
+                content: `Classify user intentions for smart contract interactions:
+                1. "generate" - Any of these cases:
+                   - Explicit contract creation requests
+                   - Descriptions of desired contract functionality
+                   - Security or access control requirements
+                   - Transfer with conditions
+                   - Funds with password/PIN protection
+                   - Time-locked transfers
+                   - Custom payment flows
+                   - Any functionality that would require a new contract
+                2. "invalid" - Completely unrelated or unclear requests
+                
+                Examples:
+                - "I want to transfer with a password" -> "generate"
+                - "Create a contract for secure transfers" -> "generate"
+                - "I need funds to be PIN protected" -> "generate"
+                - "What's the weather?" -> "invalid"
+                
+                Respond ONLY with one of these words.`
+            },
+            {
+                role: 'user',
+                content: message
+            }
+        ], { max_tokens: 10, temperature: 0 });
 
-        const intent = response.choices[0].message.content.trim().toLowerCase();
-        const teamResponse = await generateTeamResponse(intent, message, contractDetails);
+        const intent = selectedModel === 'openai' 
+            ? response.choices[0].message.content.trim().toLowerCase()
+            : response.choices[0].message.content.trim().toLowerCase();
+            
+        const teamResponse = await generateTeamResponse(intent, message, contractDetails, selectedModel);
 
         if (intent === 'generate') {
             return res.status(200).json({

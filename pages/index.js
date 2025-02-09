@@ -7,7 +7,6 @@ import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
 import OnChainProof from '../components/OnChainProof';
-import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -59,8 +58,49 @@ function ChatComponent() {
     // Add new state for transaction popup
     const [txPopup, setTxPopup] = useState(null);
 
-    // Add network switch state
-    const { switchToFlow } = useNetworkSwitch();
+    // Add this near the top with other state declarations
+    const [selectedModel, setSelectedModel] = useState('openai'); // 'openai' or 'hyperbolic'
+
+    // Add this near the top of ChatComponent
+    const FLOW_CHAIN_ID = '0x221';
+
+    // Add this with other state declarations at the top
+    const [isGeneratingProof, setIsGeneratingProof] = useState(false);
+
+    // Add this effect at the top level of your component
+    useEffect(() => {
+        const checkAndSwitchNetwork = async () => {
+            if (window.ethereum && signer && !isGeneratingProof) {
+                const network = await window.ethereum.request({ method: 'eth_chainId' });
+                if (network !== FLOW_CHAIN_ID) {
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: FLOW_CHAIN_ID }],
+                        });
+                    } catch (switchError) {
+                        if (switchError.code === 4902) {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{
+                                    chainId: FLOW_CHAIN_ID,
+                                    chainName: 'EVM on Flow (testnet)',
+                                    nativeCurrency: {
+                                        name: 'Flow Token',
+                                        symbol: 'FLOW',
+                                        decimals: 18
+                                    },
+                                    rpcUrls: ['https://testnet.evm.nodes.onflow.org'],
+                                    blockExplorerUrls: ['https://evm-testnet.flowscan.io']
+                                }]
+                            });
+                        }
+                    }
+                }
+            }
+        };
+        checkAndSwitchNetwork();
+    }, [signer, isGeneratingProof]);
 
     // Handle client-side initialization
     useEffect(() => {
@@ -446,7 +486,8 @@ function ChatComponent() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         userQuery: userMessage,
-                        context: { contractAddress }
+                        context: { contractAddress },
+                        selectedModel
                     })
                 });
                 const veeData = await veeResponse.json();
@@ -463,7 +504,8 @@ function ChatComponent() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        message: userMessage
+                        message: userMessage,
+                        selectedModel
                     })
                 });
 
@@ -477,7 +519,8 @@ function ChatComponent() {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
-                                message: userMessage
+                                message: userMessage,
+                                selectedModel
                             })
                         });
 
@@ -547,7 +590,8 @@ function ChatComponent() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 address: deployedAddress,  // Use deployedAddress consistently
-                                contractCode: contractData.contractCode
+                                contractCode: contractData.contractCode,
+                                selectedModel
                             })
                         });
 
@@ -577,7 +621,8 @@ function ChatComponent() {
                         body: JSON.stringify({ 
                             messages,
                             userQuery: userMessage,
-                            context: { contractAddress: finnData.contractAddress }
+                            context: { contractAddress: finnData.contractAddress },
+                            selectedModel
                         })
                     });
                     const veeData = await veeResponse.json();
@@ -594,7 +639,8 @@ function ChatComponent() {
                     body: JSON.stringify({ 
                         messages,
                         userQuery: userMessage,
-                        context: { contractAddress: connectedContract }
+                        context: { contractAddress: connectedContract },
+                        selectedModel
                     })
                 });
 
@@ -623,7 +669,8 @@ function ChatComponent() {
                             messages,
                             userQuery: userMessage,
                             functionInfo: functionInfo,
-                            contractAddress: connectedContract
+                            contractAddress: connectedContract,
+                            selectedModel
                         })
                     });
 
@@ -669,20 +716,13 @@ function ChatComponent() {
         }
     };
 
-    // Update executeContractFunction to match your previous working version
+    // Keep your original executeContractFunction implementation
     const executeContractFunction = async (functionInfo, params) => {
         try {
             if (!signer || !connectedContract) {
                 throw new Error('Contract or signer not initialized');
             }
 
-            console.log('Function execution details:', {
-                functionInfo,
-                params,
-                contractAddress: connectedContract
-            });
-
-            // Create minimal ABI array with just the function we need
             const minimalABI = [{
                 name: functionInfo.name,
                 type: 'function',
@@ -693,33 +733,39 @@ function ChatComponent() {
 
             const contract = new ethers.Contract(connectedContract, minimalABI, signer);
 
-            // Handle payable functions
-            let txOptions = {};
-            let processedParams = [];
-
+            // For payable functions
             if (functionInfo.stateMutability === 'payable') {
-                const amount = params.amount || Object.values(params)[0];
-                txOptions = { value: ethers.parseEther(amount.toString()) };
-                console.log('Payable transaction:', { amount, wei: txOptions.value.toString() });
+                // Extract amount - params is now directly the amount string
+                const amount = params;
+                console.log('Deposit amount:', amount); // Debug log
+                
+                const tx = await contract[functionInfo.name]({
+                    value: ethers.parseEther(amount),
+                    gasLimit: 3000000
+                });
+                
+                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+                const receipt = await tx.wait();
+                return {
+                    success: true,
+                    message: `Transaction successful! Hash: ${receipt.hash}`,
+                    hash: receipt.hash
+                };
             } else {
-                processedParams = Object.values(params);
+                // For non-payable functions
+                const processedParams = Array.isArray(params) ? params : [params];
+                const tx = await contract[functionInfo.name](...processedParams, {
+                    gasLimit: 3000000
+                });
+                
+                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+                const receipt = await tx.wait();
+                return {
+                    success: true,
+                    message: `Transaction successful! Hash: ${receipt.hash}`,
+                    hash: receipt.hash
+                };
             }
-
-            // Execute the function
-            const tx = await contract[functionInfo.name](
-                ...processedParams,
-                txOptions
-            );
-
-            addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
-            
-            const receipt = await tx.wait();
-            
-            return {
-                success: true,
-                message: `Transaction successful! Hash: ${receipt.hash}`,
-                hash: receipt.hash
-            };
 
         } catch (error) {
             console.error('Contract execution error:', error);
@@ -781,19 +827,6 @@ function ChatComponent() {
             responseHash: txData.responseHash
         });
     };
-
-    // Add new useEffect for network switching
-    useEffect(() => {
-        const checkAndSwitchNetwork = async () => {
-            if (window.ethereum && signer) {
-                const network = await window.ethereum.request({ method: 'eth_chainId' });
-                if (network !== '0xc45') { // If not on Flow
-                    await switchToFlow().catch(console.error);
-                }
-            }
-        };
-        checkAndSwitchNetwork();
-    }, [signer]);
 
     return (
         <div className="flex flex-col h-screen">
@@ -887,6 +920,23 @@ function ChatComponent() {
                         )}
                     </div>
 
+                    {/* AI Model Selector */}
+                    <div className="p-4 border-b">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <label className="text-sm font-medium text-gray-700">AI Model:</label>
+                                <select
+                                    value={selectedModel}
+                                    onChange={(e) => setSelectedModel(e.target.value)}
+                                    className="border rounded px-3 py-1 text-sm"
+                                >
+                                    <option value="openai">OpenAI GPT-4o</option>
+                                    <option value="hyperbolic">Llama 3.3 70B</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Messages Area */}
                     <div className="flex-1 overflow-y-auto p-4">
                         {error && (
@@ -935,6 +985,7 @@ function ChatComponent() {
                         messages={messages} 
                         signer={signer} 
                         onTransactionComplete={handleTransactionComplete}
+                        setIsGeneratingProof={setIsGeneratingProof}
                     />
 
                     {/* Input Area */}
