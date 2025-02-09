@@ -61,7 +61,7 @@ Though the user experiences a **single AI-driven interface**, there are actually
    - Determines whether the user wants to **create a new** contract or **interact with** an existing one.  
    - Detects invalid prompts (like prompt injection) and routes the request accordingly.
 
-2. **Cody the Creator** (For Creating Contracts)  
+2. **Codey the Creator** (For Creating Contracts)  
    - **Interprets** the user’s natural-language requirements to **generate** a new contract (e.g., “Stake before Friday,” “Require a password,” “Set up multi-sig”).  
    - Produces the underlying logic for that contract.
 
@@ -84,7 +84,7 @@ Though the user experiences a **single AI-driven interface**, there are actually
    - **Finn** detects this as a **new contract request**.
 
 2. **Contract Creation**  
-   - **Cody** converts these requirements into the proper contract logic (escrow, conditions, etc.).  
+   - **Codey** converts these requirements into the proper contract logic (escrow, conditions, etc.).  
    - The system **compiles** the contract, **deploys** it on-chain, and **verifies** it on a blockchain explorer.
 
 ---
@@ -98,6 +98,12 @@ Though the user experiences a **single AI-driven interface**, there are actually
 2. **User Interaction**  
    - The user might sign **one transaction** for a single function call or multiple if several actions are needed.  
    - Others (like recipients or authorized parties) can also connect to the contract through the **same AI-driven interface**, making the entire process straightforward.
+
+---
+
+---
+
+## Architecture & Tech Stack
 
 ---
 
@@ -172,3 +178,11 @@ Additionally, the **hashes of the created task and the operator’s response** a
 - [Front-End Code for Task Creation & Verification](#)
 
 Additionally, we integrated **Hyperbolic API** (built on EigenLayer) as our **LLM** provider, further showcasing **AVS-based** AI logic. This allows us to deliver **advanced NLP** capabilities within our agentic framework, all backed by **EigenLayer’s** security and verifiability.
+
+---
+
+## Future Implementation
+
+---
+
+## Team
