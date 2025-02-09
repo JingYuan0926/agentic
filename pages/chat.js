@@ -1069,8 +1069,8 @@ function ChatComponent() {
                             {/* Model Selection Dropdown */}
                             <Dropdown>
                                 <DropdownTrigger>
-                                    <button className="px-4 py-2 border rounded-md">
-                                        {selectedModel === 'openai' ? 'OpenAI GPT-4o' : 'Llama 3.3 70B'}
+                                    <button className="px-4 py-2 border border-gray-500 rounded-md">
+                                        {selectedModel === 'openai' ? 'OpenAI GPT-4o' : 'Hyperbolic'}
                                     </button>
                                 </DropdownTrigger>
                                 <DropdownMenu aria-label="Model Selection">
@@ -1078,7 +1078,7 @@ function ChatComponent() {
                                         OpenAI GPT-4o
                                     </DropdownItem>
                                     <DropdownItem key="hyperbolic" onClick={() => setSelectedModel('hyperbolic')}>
-                                        Llama 3.3 70B
+                                    Hyperbolic
                                     </DropdownItem>
                                 </DropdownMenu>
                             </Dropdown>
