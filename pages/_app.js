@@ -1,6 +1,6 @@
 import "@/styles/globals.css";
 import { Web3Modal } from '../context/Web3Modal'
-import '../styles/chatbot.css'
+
 
 function App({ Component, pageProps }) {
   return (

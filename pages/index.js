@@ -15,16 +15,18 @@ export default function AIInterface() {
     const { isConnected } = useWeb3ModalAccount();
     const { isOpen, onOpen, onOpenChange } = useDisclosure();
     const [isClient, setIsClient] = useState(false);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
 
     useEffect(() => {
         setIsClient(true);
     }, []);
 
     useEffect(() => {
-        if (isClient && !isConnected) {
+        if (isClient && !isConnected && isInitialLoad) {
             onOpen();
+            setIsInitialLoad(false);
         }
-    }, [isClient, isConnected, onOpen]);
+    }, [isClient, isConnected, onOpen, isInitialLoad]);
 
     const handleSubmit = async (e) => {
         e?.preventDefault();
