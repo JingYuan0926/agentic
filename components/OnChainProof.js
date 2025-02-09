@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
 
 // ABI matching exactly with respondToTask.js
 const abi = [
@@ -12,16 +13,11 @@ const abi = [
 ];
 
 const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
-const HOLESKY_CHAIN_ID = '0x4268'; // Chain ID for Holesky
 
-export default function OnChainProof({ 
-    messages, 
-    signer, 
-    isLoading, 
-    onGenerateProof,
-    onTransactionComplete 
-}) {
+export default function OnChainProof({ messages, signer, onTransactionComplete }) {
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const { switchToHolesky } = useNetworkSwitch();
 
     const generateProof = async () => {
         if (!signer) {
@@ -33,17 +29,13 @@ export default function OnChainProof({
         setError(null);
         
         try {
-            // Check and switch network first
-            const network = await signer.provider.getNetwork();
-            if (network.chainId.toString(16) !== HOLESKY_CHAIN_ID.slice(2)) {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: HOLESKY_CHAIN_ID }],
-                });
+            // Switch to Holesky network
+            const { provider, signer: holeskySigner } = await switchToHolesky();
+            if (!provider || !holeskySigner) {
+                throw new Error('Failed to switch to Holesky network');
             }
 
-            // Create provider and contract instances
-            const provider = new ethers.JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+            // Create contract instance
             const contract = new ethers.Contract(contractAddress, abi, provider);
 
             // Initialize AI wallet for signing
@@ -67,7 +59,7 @@ export default function OnChainProof({
             console.log('AI Signature:', signature);
 
             // Create contract instance with signer
-            const contractWithSigner = contract.connect(signer);
+            const contractWithSigner = contract.connect(holeskySigner);
 
             // Submit task
             const tx = await contractWithSigner.createNewTask(
@@ -147,7 +139,7 @@ export default function OnChainProof({
     };
 
     return (
-        <div className="p-4 border-t">
+        <div className="mt-4">
             <button
                 onClick={generateProof}
                 disabled={isLoading || !messages.length || !signer}

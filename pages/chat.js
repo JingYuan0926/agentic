@@ -635,8 +635,18 @@ function ChatComponent() {
 
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
-                            addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
-                            // Add new system message with proof generation option
+                            addMessage('assistant', 
+                                <Link 
+                                    href={verifyData.explorerUrl}
+                                    isExternal
+                                    showAnchorIcon
+                                    color="primary"
+                                    className="hover:opacity-70"
+                                >
+                                    View on Explorer
+                                </Link>, 
+                                'Codey'
+                            );
                             addMessage('system', 'proof-generator', 'System');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
@@ -1064,11 +1074,11 @@ function ChatComponent() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="bg-gray-100 rounded-lg p-3">
-                                                {/* <OnChainProof 
+                                                <OnChainProof 
                                                     messages={messages.filter(m => m.content !== 'proof-generator')} 
                                                     signer={signer}
                                                     onTransactionComplete={handleTransactionComplete}
-                                                /> */}
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -1194,26 +1204,38 @@ function ChatComponent() {
 
             {/* Transaction Popup */}
             {txPopup && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-                        <h3 className="text-lg font-bold mb-4">Transactions Complete!</h3>
-                        <div className="space-y-2">
-                            <p>Task Creation: <a 
-                                href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 underline"
-                            >{txPopup.createTaskHash}</a></p>
-                            <p>Operator Response: <a 
-                                href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 underline"
-                            >{txPopup.responseHash}</a></p>
+                        <h3 className="text-lg font-bold mb-4">Transactions Complete! 🎉</h3>
+                        <div className="space-y-3">
+                            <div>
+                                <p className="text-gray-600 mb-1">Task Creation:</p>
+                                <Link 
+                                    href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
+                                    isExternal
+                                    showAnchorIcon
+                                    color="primary"
+                                    className="hover:opacity-70"
+                                >
+                                    View on Explorer
+                                </Link>
+                            </div>
+                            <div>
+                                <p className="text-gray-600 mb-1">Operator Response:</p>
+                                <Link 
+                                    href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
+                                    isExternal
+                                    showAnchorIcon
+                                    color="primary"
+                                    className="hover:opacity-70"
+                                >
+                                    View on Explorer
+                                </Link>
+                            </div>
                         </div>
                         <button 
                             onClick={() => setTxPopup(null)}
-                            className="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                            className="mt-6 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
                         >
                             Close
                         </button>
