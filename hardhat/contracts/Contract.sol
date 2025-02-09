@@ -2,42 +2,38 @@
 pragma solidity ^0.8.20;
 
 /// @title A simple counter contract
-/// @notice This contract allows users to increment, decrement, and retrieve the counter value
+/// @notice This contract allows users to increment, decrement, and retrieve the current count
 contract Contract {
-    uint256 private counter;
+    uint256 private count;
 
-    /// @notice Emitted when the counter is incremented
-    /// @param newValue The new value of the counter
-    event CounterIncremented(uint256 newValue);
+    /// @dev Emitted when the count is incremented
+    event CountIncremented(uint256 newCount);
 
-    /// @notice Emitted when the counter is decremented
-    /// @param newValue The new value of the counter
-    event CounterDecremented(uint256 newValue);
+    /// @dev Emitted when the count is decremented
+    event CountDecremented(uint256 newCount);
 
-    /// @notice Initializes the counter to zero
+    /// @notice Initializes the count to zero
     constructor() {
-        counter = 0;
+        count = 0;
     }
 
-    /// @notice Increments the counter by one
-    /// @dev Emits a CounterIncremented event
+    /// @notice Increments the counter by 1
     function increment() external {
-        counter++;
-        emit CounterIncremented(counter);
+        count += 1;
+        emit CountIncremented(count);
     }
 
-    /// @notice Decrements the counter by one
-    /// @dev Emits a CounterDecremented event
-    /// @dev Requires the counter to be greater than zero
+    /// @notice Decrements the counter by 1
+    /// @dev Reverts if the count is already zero
     function decrement() external {
-        require(counter > 0, "Counter cannot be less than zero");
-        counter--;
-        emit CounterDecremented(counter);
+        require(count > 0, "Count cannot be negative");
+        count -= 1;
+        emit CountDecremented(count);
     }
 
-    /// @notice Retrieves the current value of the counter
-    /// @return The current counter value
-    function getCounter() external view returns (uint256) {
-        return counter;
+    /// @notice Returns the current count
+    /// @return The current count value
+    function getCount() external view returns (uint256) {
+        return count;
     }
 }

@@ -11,6 +11,7 @@ import { Textarea } from "@heroui/input";
 import { FiMenu, FiSend } from 'react-icons/fi';
 import Header from '../components/Header';
 import AvatarGrid from '../components/AvatarGrid';
+import { Link } from "@heroui/link";
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -581,7 +582,7 @@ function ChatComponent() {
 
                         // Wait for a few blocks
                         const receipt = await contract.deploymentTransaction().wait(2);
-                        addMessage('assistant', `Contract deployed to: ${deployedAddress}`, 'Codey');
+                        addMessage('assistant', `Contract deployed!`, 'Codey');
 
                         // Set contract as connected
                         setConnectedContract(deployedAddress);
@@ -604,8 +605,24 @@ function ChatComponent() {
 
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
-                            addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
-                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${deployedAddress}`, 'Codey');
+                            addMessage('assistant', 
+                                <div className="flex items-center gap-2">
+                                    Contract verified! 
+                                    <Link 
+                                        href={verifyData.explorerUrl}
+                                        isExternal
+                                        showAnchorIcon
+                                        color="primary"
+                                        size="sm"
+                                    >
+                                        View on FlowScan
+                                    </Link>
+                                    <span className="text-blue-500 hover:text-blue-600 text-sm cursor-pointer">
+                                        (proof on chain)
+                                    </span>
+                                </div>, 
+                                'Codey'
+                            );
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
@@ -934,42 +951,78 @@ function ChatComponent() {
                     </div>
 
                     {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto flex flex-col">
+                    <div className="flex-1 overflow-y-auto flex flex-col p-6">
                         {messages.map((message, index) => (
                             <div
                                 key={index}
                                 className={`mb-4 transition-all duration-200 ease-in-out ${
-                                    message.role === 'user' ? 'ml-auto' : 'mr-auto'
+                                    message.role === 'user' ? 'ml-auto max-w-[75%]' : 'mr-auto max-w-[75%] w-full'
                                 }`}
                             >
                                 {message.role === 'user' ? (
-                                    <div className="bg-blue-500 text-white rounded-lg p-3 max-w-[80%]">
+                                    <div className="bg-blue-500 text-white rounded-lg p-3">
                                         {message.content}
                                     </div>
                                 ) : (
-                                    <div className="flex items-start gap-2 max-w-[80%]">
-                                        <img 
-                                            src={`/ai-avatars/${message.role}.png`}
-                                            alt={message.role}
-                                            className="w-8 h-8 rounded-full"
-                                        />
-                                        <div className="bg-gray-100 rounded-lg p-3">
-                                            <div className="font-medium text-sm text-gray-600 mb-1">
-                                                {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex-shrink-0 text-center">
+                                            <img 
+                                                src={`/ai-avatars/${message.agent?.toLowerCase() || 'finn'}.png`}
+                                                alt={message.agent || 'Finn'}
+                                                className="w-8 h-8 rounded-full"
+                                            />
+                                            <div className="text-sm font-medium text-gray-600 mt-1">
+                                                {message.agent || 'Finn'}
                                             </div>
-                                            <div>{message.content}</div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="bg-gray-100 rounded-lg p-3">
+                                                <div className="break-words">
+                                                    {typeof message.content === 'string' ? 
+                                                        message.content.replace(/\.\.\./g, '…')
+                                                        .split(/(?<=[.!?])\s+/)
+                                                        .filter(Boolean)
+                                                        .join(' ')
+                                                        : message.content
+                                                    }
+                                                </div>
+                                            </div>
+                                            {message.proof && (
+                                                <div className="mt-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsProofLoading(prev => ({ ...prev, [index]: true }));
+                                                            const proofComponent = (
+                                                                <OnChainProof 
+                                                                    messages={messages} 
+                                                                    signer={signer}
+                                                                    setIsGeneratingProof={setIsGeneratingProof}
+                                                                    onComplete={() => {
+                                                                        setIsProofLoading(prev => ({ ...prev, [index]: false }));
+                                                                    }}
+                                                                />
+                                                            );
+                                                            proofComponent.props.onClick?.();
+                                                        }}
+                                                        disabled={isProofLoading[index]}
+                                                        className="text-blue-500 hover:text-blue-600 text-sm flex items-center gap-1"
+                                                    >
+                                                        {isProofLoading[index] ? (
+                                                            <>
+                                                                <svg className="animate-spin h-4 w-4 mr-1" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                                </svg>
+                                                                Generating proof...
+                                                            </>
+                                                        ) : (
+                                                            'Proof on chain'
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                )}
-                                {message.proof && (
-                                    <a 
-                                        href={message.proof}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-500 hover:text-blue-600 text-sm ml-2"
-                                    >
-                                        (proof on chain)
-                                    </a>
                                 )}
                             </div>
                         ))}

@@ -13,7 +13,7 @@ export default function AvatarGrid() {
 
   const blobs = [
     { shape: 'sphere', position: 'top-left', name: 'Finn the Finder', id: 'finder' },
-    { shape: 'dna', position: 'top-right', name: 'Cody the Creator', id: 'creator' },
+    { shape: 'dna', position: 'top-right', name: 'Codey the Creator', id: 'creator' },
     { shape: 'diamond', position: 'bottom-left', name: 'Dex the Developer', id: 'developer' },
     { shape: 'torus', position: 'bottom-right', name: 'Vee the Verifier', id: 'verifier' }
   ];

@@ -28,7 +28,8 @@ async function generateTeamUpdate(event, details, selectedModel) {
                 - Precision: ${veePersonality.traits.precision * 100}%
                 - Technical: ${veePersonality.traits.technical * 100}%
                 
-                IMPORTANT: Start with "Vee:" and keep it under 2 sentences.`
+                IMPORTANT: Start with "Vee:" and keep it under 2 sentences.
+                NEVER use "Assistant:" in your response.`
             },
             {
                 role: "user",
@@ -41,7 +42,7 @@ async function generateTeamUpdate(event, details, selectedModel) {
             : response.choices[0].message.content;
             
         if (!message.startsWith('Vee:')) {
-            message = `Vee: ${message}`;
+            message = `Vee: ${message.replace(/^(Assistant:|Vee:)?\s*/, '')}`;
         }
         return message;
     } catch (error) {
