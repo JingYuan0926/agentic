@@ -1,6 +1,14 @@
 import { ethers } from 'ethers';
 import { useState } from 'react';
 import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
+import {
+    Modal,
+    ModalContent,
+    ModalHeader,
+    ModalBody,
+    ModalFooter,
+    Button,
+} from "@heroui/react";
 
 // ABI matching exactly with respondToTask.js
 const abi = [
@@ -13,11 +21,11 @@ const abi = [
 ];
 
 const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
-const FLOW_CHAIN_ID = '0x221'; // Flow testnet chain ID
 
-export default function OnChainProof({ messages, signer, onTransactionComplete }) {
+export default function OnChainProof({ messages, signer, onTransactionComplete, onGeneratingChange }) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const { switchToHolesky } = useNetworkSwitch();
 
     const generateProof = async () => {
@@ -27,6 +35,8 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
         }
 
         setIsLoading(true);
+        // Notify parent component that generation started
+        onGeneratingChange?.(true);
         setError(null);
         
         try {
@@ -91,118 +101,128 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
             const taskIndex = event.args[0];
             console.log('Task Index:', taskIndex);
 
-            // Initialize operator wallet
-            if (!process.env.NEXT_PUBLIC_OPERATOR_PRIVATE_KEY) {
-                throw new Error('Operator private key not configured');
-            }
-            const operatorWallet = new ethers.Wallet(process.env.NEXT_PUBLIC_OPERATOR_PRIVATE_KEY, provider);
-            
-            // Create operator signature
-            const messageHash = ethers.keccak256(
-                ethers.solidityPacked(
-                    ['bool', 'bytes32'],
-                    [true, hashBeforeSign]
-                )
-            );
-            const operatorSignature = await operatorWallet.signMessage(ethers.getBytes(messageHash));
-
-            // Submit operator response
-            const operatorContract = contract.connect(operatorWallet);
-            const responseTx = await operatorContract.respondToTask(
-                {
+            // Call operator response API
+            const operatorResponse = await fetch('/api/operator-response', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taskIndex: taskIndex.toString(),
                     hashBeforeSign,
                     signature
-                },
-                taskIndex,
-                "Verified",
-                operatorSignature,
-                { gasLimit: 500000 }
-            );
+                })
+            });
 
-            console.log('Response transaction sent:', responseTx.hash);
-            const responseReceipt = await responseTx.wait();
-            console.log('Response receipt:', responseReceipt);
-
-            // After successful proof generation, switch back to Flow network
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: FLOW_CHAIN_ID }],
-                });
-            } catch (switchError) {
-                if (switchError.code === 4902) {
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [{
-                            chainId: FLOW_CHAIN_ID,
-                            chainName: 'EVM on Flow (testnet)',
-                            nativeCurrency: {
-                                name: 'Flow Token',
-                                symbol: 'FLOW',
-                                decimals: 18
-                            },
-                            rpcUrls: ['https://testnet.evm.nodes.onflow.org'],
-                            blockExplorerUrls: ['https://evm-testnet.flowscan.io']
-                        }]
-                    });
-                }
+            if (!operatorResponse.ok) {
+                const error = await operatorResponse.json();
+                throw new Error(error.message || 'Failed to get operator response');
             }
+
+            const operatorData = await operatorResponse.json();
 
             // Call the callback with transaction data
             if (onTransactionComplete) {
                 onTransactionComplete({
                     createTaskHash: tx.hash,
-                    responseHash: responseTx.hash
+                    responseHash: operatorData.transactionHash
                 });
             }
 
         } catch (error) {
             console.error('Error:', error);
             setError(error.message);
-            // Try to switch back to Flow network even if there's an error
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: FLOW_CHAIN_ID }],
-                });
-            } catch (switchError) {
-                console.error('Failed to switch back to Flow network:', switchError);
-            }
         } finally {
             setIsLoading(false);
+            // Notify parent component that generation finished
+            onGeneratingChange?.(false);
         }
     };
 
     return (
         <div className="mt-4">
-            <button
-                onClick={generateProof}
+            <Button
+                onClick={() => setIsModalOpen(true)}
                 disabled={isLoading || !messages.length || !signer}
-                className={`w-full px-4 py-2 rounded ${
+                className={`w-full ${
                     isLoading || !signer || !messages.length
                         ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-green-500 hover:bg-green-600'
-                } text-white transition-colors flex items-center justify-center gap-2`}
+                        : 'bg-gradient-to-r from-[#823EE4] to-[#37DDDF]'
+                } text-white`}
             >
-                {isLoading ? (
-                    <>
-                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Generating Proof...</span>
-                    </>
-                ) : !signer ? (
-                    'Connect Wallet First'
-                ) : !messages.length ? (
-                    'No Messages to Prove'
-                ) : (
-                    'Generate On-Chain Proof'
-                )}
-            </button>
-            {error && (
-                <p className="text-red-500 text-sm mt-2">{error}</p>
-            )}
+                {isLoading ? 'Generating...' : 'Generate On-Chain Proof'}
+            </Button>
+
+            <Modal 
+                isOpen={isModalOpen} 
+                onOpenChange={setIsModalOpen}
+                placement="center"
+                backdrop="blur"
+            >
+                <ModalContent>
+                    {(onClose) => (
+                        <>
+                            <ModalHeader className="flex flex-col gap-1">
+                                Generate On-Chain Proof
+                            </ModalHeader>
+                            <ModalBody>
+                                <div className="flex flex-col items-center text-center gap-4">
+                                    <div className="bg-purple-100 rounded-full p-4">
+                                        <svg 
+                                            width="24" 
+                                            height="24" 
+                                            viewBox="0 0 24 24" 
+                                            fill="none" 
+                                            className="text-purple-600"
+                                            stroke="currentColor" 
+                                            strokeWidth="2"
+                                        >
+                                            <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                                            <path d="M2 17L12 22L22 17" />
+                                            <path d="M2 12L12 17L22 12" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-xl font-semibold text-gray-900">
+                                        Confirm Proof Generation
+                                    </h3>
+                                    <p className="text-gray-600">
+                                        This will generate an on-chain proof of your conversation. 
+                                        The process requires one transaction to be signed.
+                                    </p>
+                                    {error && (
+                                        <p className="text-red-500 text-sm mt-2">{error}</p>
+                                    )}
+                                </div>
+                            </ModalBody>
+                            <ModalFooter>
+                                <Button 
+                                    color="danger" 
+                                    variant="light" 
+                                    onPress={onClose}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    color="primary"
+                                    onPress={() => {
+                                        generateProof();
+                                        onClose();
+                                    }}
+                                    isLoading={isLoading}
+                                    className="bg-gradient-to-r from-[#823EE4] to-[#37DDDF] text-white"
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <span className="animate-spin mr-2">⚡</span>
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        'Generate Proof'
+                                    )}
+                                </Button>
+                            </ModalFooter>
+                        </>
+                    )}
+                </ModalContent>
+            </Modal>
         </div>
     );
 } 

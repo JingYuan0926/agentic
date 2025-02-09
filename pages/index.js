@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { Textarea } from "@heroui/input";
 import { useRouter } from 'next/router';
@@ -14,6 +14,19 @@ export default function AIInterface() {
     const [isLoading, setIsLoading] = useState(false);
     const { isConnected } = useWeb3ModalAccount();
     const { isOpen, onOpen, onOpenChange } = useDisclosure();
+    const [isClient, setIsClient] = useState(false);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
+    useEffect(() => {
+        if (isClient && !isConnected && isInitialLoad) {
+            onOpen();
+            setIsInitialLoad(false);
+        }
+    }, [isClient, isConnected, onOpen, isInitialLoad]);
 
     const handleSubmit = async (e) => {
         e?.preventDefault();
@@ -49,6 +62,10 @@ export default function AIInterface() {
             console.error('Navigation error:', error);
         }
     };
+
+    if (!isClient) {
+        return null;
+    }
 
     return (
         <div className="h-screen overflow-hidden" style={{ fontFamily: 'Epilogue, sans-serif' }}>
@@ -154,7 +171,7 @@ export default function AIInterface() {
                                         disabled={!isConnected}
                                         style={{
                                             border: 'none',
-                                            padding: '5px 480px 0px 0px',
+                                            padding: '5px 16px',
                                             fontSize: '16px',
                                             resize: 'none',
                                             height: '30px',

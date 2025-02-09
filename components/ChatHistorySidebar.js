@@ -1,6 +1,6 @@
 import { useWeb3ModalAccount } from "@web3modal/ethers/react";
 import { TrashIcon } from '@heroicons/react/24/outline';
-import {CircularProgress} from "@heroui/progress";
+import { CircularProgress } from "@heroui/progress";
 import { useState, useEffect } from 'react';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 
@@ -33,19 +33,15 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
     }, [isConnected, address, refreshTrigger, nilQLWrapper]);
 
     const truncateText = (text, maxLength = 20) => {
-        // Handle case where text is an object with $allot
         if (typeof text === 'object' && text.$allot) {
-            // For encrypted content, just show a generic title
             return "Encrypted message...";
         }
         
-        // Handle normal string text
         if (typeof text === 'string') {
             if (text.length <= maxLength) return text;
             return text.substring(0, maxLength) + '...';
         }
 
-        // Fallback for any other case
         return "New message";
     };
 
@@ -65,7 +61,6 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
             if (!response.ok) throw new Error('Failed to load chats');
             const data = await response.json();
             
-            // Group messages by chatId first
             const chatGroups = data.reduce((acc, msg) => {
                 if (!acc[msg.chatId]) {
                     acc[msg.chatId] = [];
@@ -74,11 +69,9 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                 return acc;
             }, {});
 
-            // Process each chat group
             const userChats = await Promise.all(
                 Object.entries(chatGroups).map(async ([chatId, messages]) => {
                     try {
-                        // Sort messages by timestamp and get the latest
                         const sortedMessages = messages.sort((a, b) => 
                             new Date(b.timestamp) - new Date(a.timestamp)
                         );
@@ -86,9 +79,23 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                         
                         if (!latestMessage) return null;
 
-                        const messageData = JSON.parse(latestMessage.message);
+                        let messageData;
+                        try {
+                            messageData = JSON.parse(latestMessage.message);
+                        } catch (e) {
+                            console.error('Failed to parse message data:', e);
+                            return null;
+                        }
+
+                        if (!messageData || !Array.isArray(messageData.messages)) {
+                            console.error('Invalid message data structure');
+                            return null;
+                        }
+
                         const decryptedMessages = await Promise.all(
                             messageData.messages.map(async (chatMsg) => {
+                                if (!chatMsg) return null;
+                                
                                 if (chatMsg.content && typeof chatMsg.content === 'object' && chatMsg.content.$allot) {
                                     try {
                                         const decryptedContent = await nilQLWrapper.decrypt(chatMsg.content.$allot);
@@ -102,12 +109,12 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                             })
                         );
 
-                        // Find first user message for title
-                        const firstUserMessage = decryptedMessages.find(m => m.role === 'user');
+                        const validMessages = decryptedMessages.filter(Boolean);
+                        const firstUserMessage = validMessages.find(m => m.role === 'user');
                         
                         return {
                             id: chatId,
-                            messages: decryptedMessages,
+                            messages: validMessages,
                             timestamp: latestMessage.timestamp,
                             walletAddress: latestMessage.walletAddress,
                             title: messageData.title || truncateText(firstUserMessage?.content) || 'New Chat'
@@ -119,7 +126,6 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
                 })
             );
 
-            // Filter out any failed parses and sort by timestamp
             const sortedChats = userChats
                 .filter(Boolean)
                 .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -150,10 +156,8 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
 
             if (!response.ok) throw new Error('Failed to delete chat');
             
-            // Just remove the chat from local state
             setChats(prev => prev.filter(chat => chat.id !== chatId));
-            // Notify parent component
-            onChatDelete(chatId);
+            onChatDelete?.(chatId);
         } catch (error) {
             console.error('Failed to delete chat:', error);
             alert('Failed to delete chat: ' + error.message);
@@ -162,21 +166,14 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
 
     const formatDate = (timestamp) => {
         const date = new Date(timestamp);
-        // Subtract 8 hours for UTC-8
-        date.setHours(date.getHours() );
-        
-        // Format date as dd/mm/yyyy
         const day = date.getDate().toString().padStart(2, '0');
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         const year = date.getFullYear();
-        
-        // Format time as X:XXam/pm (GMT-8)
         let hours = date.getHours();
         const minutes = date.getMinutes().toString().padStart(2, '0');
         const ampm = hours >= 12 ? 'pm' : 'am';
-        hours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
+        hours = hours % 12 || 12;
         
-        // Return all in one line with smaller font for GMT-8
         return (
             <span className="whitespace-nowrap">
                 {`${day}/${month}/${year} ${hours}:${minutes}${ampm}`}
@@ -187,15 +184,10 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
 
     const renderChatTitle = (chat) => {
         try {
-            // Only show actual content if it's the owner's chat
             if (chat.walletAddress !== address) {
                 return "Encrypted Chat";
             }
-
-            // Safely parse the message
             if (!chat.title) return "New Chat";
-            
-            // If we have a title, use it
             return chat.title;
         } catch (e) {
             console.error('Failed to parse chat title:', e);
@@ -204,77 +196,50 @@ function ChatHistorySidebar({ onChatSelect, onChatDelete, refreshTrigger, select
     };
 
     return (
-        <div className={`w-64 border-r dark:border-gray-700 ${!isConnected ? 'opacity-50' : ''} flex flex-col h-full`}>
-            <div className="p-4 flex-1">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-semibold text-black dark:text-white">
-                        Chat History
-                    </h2>
+        <div className="w-80 bg-white h-full flex flex-col">
+            <div className="p-4 border-b">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Chat History</h2>
                     <button
-                        onClick={() => {
-                            onChatSelect({ id: null });
-                        }}
+                        onClick={() => onChatSelect({ id: null })}
                         disabled={!isConnected}
-                        className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50
-                                 text-sm font-medium"
+                        className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm"
                     >
                         New Chat
                     </button>
                 </div>
+            </div>
 
+            <div className="flex-1 overflow-y-auto">
                 {isLoading ? (
-                    <div className="flex items-center justify-center h-[calc(100%-60px)]">
-                        <CircularProgress 
-                            aria-label="Loading chats..." 
-                            color="primary"
-                            className="w-10 h-10"
-                        />
+                    <div className="flex justify-center items-center h-full">
+                        <CircularProgress size="sm" />
                     </div>
                 ) : !chats || chats.length === 0 ? (
-                    <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                        No chat history yet.
-                        <br />
-                        Start a new conversation!
+                    <div className="text-center p-4 text-gray-500">
+                        No chats yet
                     </div>
                 ) : (
-                    <div className="space-y-0.5 overflow-y-auto max-h-[calc(100vh-200px)]">
+                    <div className="divide-y">
                         {chats.map((chat) => (
                             <div
-                                key={`chat-${chat.id}`}
-                                className="group relative hover:bg-gray-100 dark:hover:bg-gray-700 
-                                         transition-colors rounded cursor-pointer"
+                                key={chat.id}
+                                onClick={() => onChatSelect(chat)}
+                                className={`p-3 hover:bg-gray-50 cursor-pointer group relative ${
+                                    selectedChatId === chat.id ? 'bg-blue-50' : ''
+                                }`}
                             >
-                                <div 
-                                    onClick={() => onChatSelect({
-                                        id: chat.id,
-                                        messages: chat.messages,
-                                        walletAddress: chat.walletAddress
-                                    })}
-                                    className="p-2 pr-10"
-                                >
-                                    <div className="font-medium text-black dark:text-white truncate">
-                                        {renderChatTitle(chat)}
-                                    </div>
-                                    <div 
-                                        className="text-sm text-gray-500"
-                                        suppressHydrationWarning={true}
-                                    >
-                                        {formatDate(chat.timestamp)}
-                                    </div>
+                                <div className="truncate font-medium">
+                                    {renderChatTitle(chat)}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                    {formatDate(chat.timestamp)}
                                 </div>
                                 <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDelete(e, chat.id);
-                                    }}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2
-                                             text-red-500 hover:text-red-700 
-                                             opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title="Delete chat"
-                                    disabled={!isConnected}
+                                    onClick={(e) => handleDelete(e, chat.id)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
                                 >
-                                    <TrashIcon className="h-5 w-5" />
+                                    <TrashIcon className="h-4 w-4 text-red-500" />
                                 </button>
                             </div>
                         ))}
