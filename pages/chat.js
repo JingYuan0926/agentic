@@ -1093,10 +1093,10 @@ function ChatComponent() {
                                                         }
                                                     </div>
                                                 </div>
-                                                {message.content === 'proof-generator' && (
+                                                {message.content === 'Do you want to generate a proof of execution on chain?' && (
                                                     <div className="mt-2">
                                                         <OnChainProof 
-                                                            messages={messages.filter(m => m.content !== 'proof-generator')} 
+                                                            messages={messages.filter(m => m.content !== 'Do you want to generate a proof of execution on chain?')} 
                                                             signer={signer}
                                                             onTransactionComplete={handleTransactionComplete}
                                                         />
@@ -1143,7 +1143,7 @@ function ChatComponent() {
             {txPopup && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-                        <h3 className="text-lg font-bold mb-4">Transactions Complete! 🎉</h3>
+                        <h3 className="text-lg font-bold mb-4">Verified on Chain! 🎉</h3>
                         <div className="space-y-3">
                             <div>
                                 <p className="text-gray-600 mb-1">Task Creation:</p>

@@ -1,40 +1,46 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple counter contract
-/// @notice This contract allows users to increment, decrement, and reset a counter
+/// @title Counter Contract
+/// @notice A simple contract to manage a counter with increment, decrement, and reset functionalities
 contract Contract {
-    uint256 private count;
-    event CountUpdated(uint256 newCount);
+    uint256 private counter;
+
+    event CounterIncremented(uint256 newCounter);
+    event CounterDecremented(uint256 newCounter);
+    event CounterReset(uint256 newCounter);
 
     /// @notice Initializes the counter to zero
     constructor() {
-        count = 0;
+        counter = 0;
     }
 
     /// @notice Increments the counter by one
+    /// @dev Emits a CounterIncremented event
     function increment() external {
-        count++;
-        emit CountUpdated(count);
+        counter++;
+        emit CounterIncremented(counter);
     }
 
     /// @notice Decrements the counter by one
     /// @dev Requires the counter to be greater than zero
+    /// @dev Emits a CounterDecremented event
     function decrement() external {
-        require(count > 0, "Counter cannot be less than zero");
-        count--;
-        emit CountUpdated(count);
+        require(counter > 0, "Counter cannot be less than zero");
+        counter--;
+        emit CounterDecremented(counter);
     }
 
     /// @notice Resets the counter to zero
+    /// @dev Emits a CounterReset event
     function reset() external {
-        count = 0;
-        emit CountUpdated(count);
+        counter = 0;
+        emit CounterReset(counter);
     }
 
     /// @notice Returns the current value of the counter
-    /// @return The current count value
-    function getCount() external view returns (uint256) {
-        return count;
+    /// @return The current counter value
+    function getCounter() external view returns (uint256) {
+        return counter;
     }
 }
