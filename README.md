@@ -185,10 +185,42 @@ Additionally, we integrated **Hyperbolic API** (built on EigenLayer) as our **LL
 
 ---
 
-## Future Implementation
+## Future Implementations
 
+1. **Native Smart Wallet**  
+   - Instead of relying on external EOAs (like MetaMask), we plan to build our **own smart wallet** solution. This would let us programmatically tailor each account’s logic and other conditions **directly** at the wallet level.
 
+2. **Deeper Account Abstraction**  
+   - With full **account abstraction**, users would never handle low-level transactions themselves. They’d simply describe what they want in plain English, and our AI-managed wallet would pay gas, schedule actions, or enforce constraints automatically—further simplifying the user experience.
+
+3. **Enhanced Security & Recovery**  
+   - By controlling the entire smart wallet layer, we can offer built-in **social recovery**, session keys, or advanced authorization mechanisms—protecting users from private-key leaks and other common pitfalls.
+
+These improvements will **eliminate the need** for a separate wallet interface (like MetaMask) and **unlock a fully customizable**, AI-driven on-chain ecosystem. 
 
 ---
 
 ## Team
+
+## Team
+
+- **Derek Liew Qi Jian**  
+  - *Role*: Project Lead, AI & Backend  
+  - [LinkedIn](https://www.linkedin.com/in/derek2403/) | [Twitter](https://x.com/derek2403)
+
+- **Phen Jing Yuan**  
+  - *Role*: Backend & Frontend Integration  
+  - [LinkedIn](https://www.linkedin.com/in/jing-yuan-phen-b42266295/) | [Twitter](https://x.com/ilovedahmo)
+
+- **Marcus Tan Chi Yau**  
+  - *Role*: Backend  
+  - [LinkedIn](https://www.linkedin.com/in/marcus-tan-8846ba271/)
+
+- **Cedric Chung**  
+  - *Role*: Frontend Development  
+  - [LinkedIn](https://www.linkedin.com/in/cedric-chung-2756b4310/)
+
+- **Tan Zhi Wei**  
+  - *Role*: Frontend & UI/UX Design  
+  - [LinkedIn](https://www.linkedin.com/in/tanzhiwei0328/)
+
