@@ -103,8 +103,6 @@ Though the user experiences a **single AI-driven interface**, there are actually
 
 ---
 
----
-
 ## Architecture & Tech Stack
 
 ---
