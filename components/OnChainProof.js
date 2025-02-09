@@ -22,7 +22,7 @@ const abi = [
 
 const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
 
-export default function OnChainProof({ messages, signer, onTransactionComplete }) {
+export default function OnChainProof({ messages, signer, onTransactionComplete, onGeneratingChange }) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,6 +35,8 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
         }
 
         setIsLoading(true);
+        // Notify parent component that generation started
+        onGeneratingChange?.(true);
         setError(null);
         
         try {
@@ -130,6 +132,8 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
             setError(error.message);
         } finally {
             setIsLoading(false);
+            // Notify parent component that generation finished
+            onGeneratingChange?.(false);
         }
     };
 

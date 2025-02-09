@@ -1083,6 +1083,7 @@ function ChatComponent() {
                                                             messages={messages.filter(m => m.content !== 'Do you want to generate a proof of execution on chain?')} 
                                                             signer={signer}
                                                             onTransactionComplete={handleTransactionComplete}
+                                                            onGeneratingChange={setIsGeneratingProof}
                                                         />
                                                     </div>
                                                 )}
@@ -1105,19 +1106,21 @@ function ChatComponent() {
                                         ? "Connect Wallet to Start Using Us"
                                         : isLoading
                                             ? "AI is responding..."
-                                            : "Type your message here..."
+                                            : isGeneratingProof
+                                                ? "Generating proof..."
+                                                : "Type your message here..."
                                 }
                                 minRows={1}
                                 maxRows={4}
                                 className="flex-1"
                                 onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                                disabled={!isConnected || isLoading}
+                                disabled={!isConnected || isLoading || isGeneratingProof}
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={isLoading || !input.trim() || !isConnected}
+                                disabled={isLoading || !input.trim() || !isConnected || isGeneratingProof}
                                 className={`p-3 rounded-full relative ${
-                                    !isConnected || !input.trim()
+                                    !isConnected || !input.trim() || isGeneratingProof
                                         ? 'bg-gray-200 cursor-not-allowed'
                                         : isLoading
                                             ? 'bg-blue-400 cursor-wait'
