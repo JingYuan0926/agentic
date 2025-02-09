@@ -1,6 +1,8 @@
 # 4AI 1Human: A Customizable Agentic Interface
 **From NLP to Reality: Use Blockchain Like ABC**
 
+![Logo](public/logo.png)
+
 A customizable, AI-driven **interface** that lets you send funds with the exact requirements you choose—or manage any transaction the way you envision. Simply connect MetaMask, describe your desired on-chain logic in plain English, and our system will make it happen.
 
 ---
