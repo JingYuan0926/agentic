@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import Blob from '@/components/Blob';
-import '../styles/globals.css';
 
 
 export default function Home() {
