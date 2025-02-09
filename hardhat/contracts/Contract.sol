@@ -2,33 +2,35 @@
 pragma solidity ^0.8.20;
 
 /// @title A simple counter contract
-/// @notice This contract allows users to increment, decrement, and retrieve a counter value
+/// @notice This contract allows users to increment, decrement, and retrieve the counter value
 contract Contract {
     uint256 private counter;
 
-    event CounterUpdated(uint256 newCounter);
+    event CounterUpdated(uint256 newValue);
 
-    /// @dev Initializes the counter to zero
-    function initialize() external {
+    /// @notice Initializes the counter to zero
+    function initialize() public {
         counter = 0;
+        emit CounterUpdated(counter);
     }
 
     /// @notice Increments the counter by one
-    function increment() external {
+    function increment() public {
         counter++;
         emit CounterUpdated(counter);
     }
 
     /// @notice Decrements the counter by one
-    /// @dev Reverts if the counter is already zero
-    function decrement() external {
+    /// @dev Requires the counter to be greater than zero to avoid underflow
+    function decrement() public {
         require(counter > 0, "Counter cannot be negative");
         counter--;
         emit CounterUpdated(counter);
     }
 
-    /// @return The current counter value
-    function getCounter() external view returns (uint256) {
+    /// @notice Retrieves the current counter value
+    /// @return The current value of the counter
+    function getCounter() public view returns (uint256) {
         return counter;
     }
 }

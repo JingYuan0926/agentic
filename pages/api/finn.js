@@ -205,7 +205,7 @@ export default async function handler(req, res) {
         // Handle invalid or security concerns (only when not connected)
         return res.status(200).json({
             intent: 'invalid',
-            teamResponse: 'Please provide a contract address or ask to generate a new contract.',
+            teamResponse: 'Sorry I dont understand. Please provide a contract address to connect to or ask to generate a new contract.',
             nextAgent: aiTeam.guard.name,
             isConnected: false
         });

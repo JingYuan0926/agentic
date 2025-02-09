@@ -612,7 +612,6 @@ function ChatComponent() {
 
                         // Wait for a few blocks
                         const receipt = await contract.deploymentTransaction().wait(2);
-                        addMessage('assistant', `Contract deployed!`, 'Codey');
 
                         // Set contract as connected
                         setConnectedContract(deployedAddress);
@@ -635,6 +634,10 @@ function ChatComponent() {
 
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
+                            setDeployedAddress(deployedAddress);
+                            addMessage('assistant', 'Contract deployed!', 'Codey');
+                            
+                            // Add View on Explorer link
                             addMessage('assistant', 
                                 <Link 
                                     href={verifyData.explorerUrl}
@@ -647,7 +650,27 @@ function ChatComponent() {
                                 </Link>, 
                                 'Codey'
                             );
-                            addMessage('system', 'Do you want to generate a proof of execution on chain?', 'Codey');
+
+                            // Add proof generation prompt
+                            addMessage('assistant', 'Do you want to generate a proof of execution on chain?', 'Codey');
+
+                            // Add contract explanation at the end
+                            try {
+                                const explainResponse = await fetch('/api/explain', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        contractAddress: deployedAddress,
+                                    })
+                                });
+
+                                const explainData = await explainResponse.json();
+                                if (explainData.success) {
+                                    addMessage('assistant', `Here's what you can do with your new contract:\n${explainData.explanation}`, 'Vee');
+                                }
+                            } catch (explainError) {
+                                console.error('Error getting contract explanation:', explainError);
+                            }
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
@@ -662,6 +685,20 @@ function ChatComponent() {
                     setConnectedContract(finnData.contractAddress);
                     setIsContractConnected(true);
                     addTeamUpdate('System', `Connected to contract ${finnData.contractAddress}`);
+                    
+                    // Add contract explanation after connection
+                    const explainResponse = await fetch('/api/explain', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contractAddress: finnData.contractAddress,
+                        })
+                    });
+
+                    const explainData = await explainResponse.json();
+                    if (explainData.success) {
+                        addMessage('assistant', `Connected! You can start by ${explainData.explanation}`, 'Vee');
+                    }
                     
                     // Pass to Vee for initial analysis
                     const veeResponse = await fetch('/api/vee', {
