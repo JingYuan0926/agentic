@@ -87,7 +87,7 @@ export default function AIInterface() {
                     <div className="text-center w-full">
                         <div className="space-y-0">
                             <h1 className="text-6xl font-bold bg-gradient-to-r from-[#823EE4] via-[#99BBFF] to-[#00EF8B] inline-block text-transparent bg-clip-text mb-0">
-                                4 Human 1 AI
+                                4 AI 1 Human
                             </h1>
 
                             <div className="flex items-center justify-center -mt-1">
