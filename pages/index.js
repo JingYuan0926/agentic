@@ -505,45 +505,40 @@ function ChatComponent() {
                             throw new Error('Failed to receive contract data');
                         }
 
-                        // Modify contract deployment section
+                        // Deploy contract
                         addMessage('assistant', 'Deploying contract...', 'Codey');
-                        
-                        // Add signer check
-                        if (!signer) {
-                            throw new Error('Please connect your wallet first');
-                        }
-
-                        // Get the signer again to ensure it's fresh
-                        const provider = new BrowserProvider(walletProvider);
-                        const currentSigner = await provider.getSigner();
-                        
-                        // Create contract factory with proper signer
                         const factory = new ethers.ContractFactory(
                             contractData.abi,
                             contractData.bytecode,
-                            currentSigner  // Use the fresh signer
+                            signer
                         );
 
                         const contract = await factory.deploy({
                             gasLimit: 3000000
                         });
 
-                        addMessage('assistant', `Contract deployed to: ${contract.address}`, 'Codey');
+                        addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
+                        await contract.waitForDeployment();
+                        const deployedAddress = await contract.getAddress();  // Get address immediately
+
+                        // Wait for a few blocks
+                        const receipt = await contract.deploymentTransaction().wait(2);
+                        addMessage('assistant', `Contract deployed to: ${deployedAddress}`, 'Codey');
 
                         // Set contract as connected
-                        setConnectedContract(contract.address);
+                        setConnectedContract(deployedAddress);
                         setIsContractConnected(true);
-                        addTeamUpdate('System', `Connected to contract ${contract.address}`);
+                        addTeamUpdate('System', `Connected to contract ${deployedAddress}`);
 
                         // Wait before verification
                         await new Promise(resolve => setTimeout(resolve, 5000));
 
-                        // Verify contract
+                        // Verify contract with the correct address
                         const verifyResponse = await fetch('/api/verify', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                address: contract.address,
+                                address: deployedAddress,  // Use deployedAddress consistently
                                 contractCode: contractData.contractCode
                             })
                         });
@@ -551,14 +546,14 @@ function ChatComponent() {
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
                             addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
-                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${contract.address}`, 'Codey');
+                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${deployedAddress}`, 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
 
                     } catch (error) {
                         console.error('Deployment error:', error);
-                        addMessage('system', `Error: ${error.message}`);
+                        addMessage('system', `Error: ${error.message}`, 'System');
                     }
                 }
                 // If Finn detects contract connection request

@@ -62,8 +62,11 @@ async function generateTeamResponse(intent, message, contractDetails) {
                     - ${aiTeam.dex.name}: Extracts function parameters
                     - ${aiTeam.guard.name}: Monitors security
                     
+                    When users describe desired functionality (like transfers with PINs, 
+                    time locks, or security features), direct to Codey for contract creation.
+                    
                     Based on the intent "${intent}" and contract status, coordinate the team:
-                    - For "generate": Direct to Codey for new contracts
+                    - For "generate": Direct to Codey and mention the specific feature to be implemented
                     - For "connect": Direct to Vee and Dex for contract interaction
                     - For "invalid": Guide the user appropriately
                     
@@ -87,7 +90,7 @@ async function generateTeamResponse(intent, message, contractDetails) {
         }
         return responseText;
     } catch (error) {
-        return `Finn: Coordinating team response for ${intent} request...`;
+        return `Finn: Directing this to Codey to create a secure contract with your specified requirements!`;
     }
 }
 
@@ -164,8 +167,22 @@ export default async function handler(req, res) {
                 {
                     role: 'system',
                     content: `Classify user intentions for smart contract interactions:
-                    1. "generate" - Create/deploy new contract
-                    2. "invalid" - Unclear or security concern
+                    1. "generate" - Any of these cases:
+                       - Explicit contract creation requests
+                       - Descriptions of desired contract functionality
+                       - Security or access control requirements
+                       - Transfer with conditions
+                       - Funds with password/PIN protection
+                       - Time-locked transfers
+                       - Custom payment flows
+                       - Any functionality that would require a new contract
+                    2. "invalid" - Completely unrelated or unclear requests
+                    
+                    Examples:
+                    - "I want to transfer with a password" -> "generate"
+                    - "Create a contract for secure transfers" -> "generate"
+                    - "I need funds to be PIN protected" -> "generate"
+                    - "What's the weather?" -> "invalid"
                     
                     Respond ONLY with one of these words.`
                 },
