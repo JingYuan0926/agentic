@@ -105,6 +105,10 @@ Though the user experiences a **single AI-driven interface**, there are actually
 
 ## Architecture & Tech Stack
 
+![Agents](https://raw.githubusercontent.com/JingYuan0926/agentic/main/public/Agents.png)
+
+This diagram illustrates how our **4AI-1Human Agentic Interface** works, showing the interaction between users, AI agents, and on-chain components.
+
 ### Architectural Diagram
 
 ![Architectural Diagram](https://raw.githubusercontent.com/JingYuan0926/agentic/main/public/ArchitecturalDiagram.png)
@@ -154,7 +158,7 @@ We integrate Flow’s **EVM-compatible testnet** to provide a **consumer-friendl
 - We added Flow’s RPC endpoint in our Hardhat config, using **Alchemy** to connect.  
 - We compile the Solidity, then **deploy** to Flow’s network and **verify** via the Blockscout interface.  
 - [Link to Compile and Deploy Smart Contract]([#](https://github.com/JingYuan0926/agentic/blob/main/pages/api/codey.js)) 
-- [Verification Script (https://github.com/JingYuan0926/agentic/blob/main/pages/api/verify.js)
+- [Verification Script] (https://github.com/JingYuan0926/agentic/blob/main/pages/api/verify.js)
 
 By doing so, **everyday users** can simply give a **plain-English** instruction (e.g., “Send 0.2 FLOW to Bob with a time lock”), and our AI interface automates the entire Flow contract interaction—**no** coding required.
 
