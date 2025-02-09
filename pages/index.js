@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
+import OnChainProof from '../components/OnChainProof';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -53,6 +54,47 @@ function ChatComponent() {
 
     // Add refresh trigger for chat history
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    // Add new state for transaction popup
+    const [txPopup, setTxPopup] = useState(null);
+
+    // Add this near the top with other state declarations
+    const [selectedModel, setSelectedModel] = useState('openai'); // 'openai' or 'hyperbolic'
+
+    // Add this effect at the top level of your component
+    useEffect(() => {
+        const checkAndSwitchNetwork = async () => {
+            if (window.ethereum && signer) {
+                const network = await window.ethereum.request({ method: 'eth_chainId' });
+                if (network !== '0x221') { // If not on Flow
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x221' }],
+                        });
+                    } catch (switchError) {
+                        if (switchError.code === 4902) {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{
+                                    chainId: '0x221',
+                                    chainName: 'EVM on Flow (testnet)',
+                                    nativeCurrency: {
+                                        name: 'Flow Token',
+                                        symbol: 'FLOW',
+                                        decimals: 18
+                                    },
+                                    rpcUrls: ['https://testnet.evm.nodes.onflow.org'],
+                                    blockExplorerUrls: ['https://evm-testnet.flowscan.io']
+                                }]
+                            });
+                        }
+                    }
+                }
+            }
+        };
+        checkAndSwitchNetwork();
+    }, [signer]);
 
     // Handle client-side initialization
     useEffect(() => {
@@ -438,7 +480,8 @@ function ChatComponent() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         userQuery: userMessage,
-                        context: { contractAddress }
+                        context: { contractAddress },
+                        selectedModel
                     })
                 });
                 const veeData = await veeResponse.json();
@@ -455,7 +498,8 @@ function ChatComponent() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        message: userMessage
+                        message: userMessage,
+                        selectedModel
                     })
                 });
 
@@ -469,7 +513,8 @@ function ChatComponent() {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
-                                message: userMessage
+                                message: userMessage,
+                                selectedModel
                             })
                         });
 
@@ -505,60 +550,56 @@ function ChatComponent() {
                             throw new Error('Failed to receive contract data');
                         }
 
-                        // Modify contract deployment section
+                        // Deploy contract
                         addMessage('assistant', 'Deploying contract...', 'Codey');
-                        
-                        // Add signer check
-                        if (!signer) {
-                            throw new Error('Please connect your wallet first');
-                        }
-
-                        // Get the signer again to ensure it's fresh
-                        const provider = new BrowserProvider(walletProvider);
-                        const currentSigner = await provider.getSigner();
-                        
-                        // Create contract factory with proper signer
                         const factory = new ethers.ContractFactory(
                             contractData.abi,
                             contractData.bytecode,
-                            currentSigner  // Use the fresh signer
+                            signer
                         );
 
                         const contract = await factory.deploy({
                             gasLimit: 3000000
                         });
 
-                        addMessage('assistant', `Contract deployed to: ${contract.address}`, 'Codey');
+                        addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
+                        await contract.waitForDeployment();
+                        const deployedAddress = await contract.getAddress();  // Get address immediately
+
+                        // Wait for a few blocks
+                        const receipt = await contract.deploymentTransaction().wait(2);
+                        addMessage('assistant', `Contract deployed to: ${deployedAddress}`, 'Codey');
 
                         // Set contract as connected
-                        setConnectedContract(contract.address);
+                        setConnectedContract(deployedAddress);
                         setIsContractConnected(true);
-                        addTeamUpdate('System', `Connected to contract ${contract.address}`);
+                        addTeamUpdate('System', `Connected to contract ${deployedAddress}`);
 
                         // Wait before verification
                         await new Promise(resolve => setTimeout(resolve, 5000));
 
-                        // Verify contract
+                        // Verify contract with the correct address
                         const verifyResponse = await fetch('/api/verify', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                address: contract.address,
-                                contractCode: contractData.contractCode
+                                address: deployedAddress,  // Use deployedAddress consistently
+                                contractCode: contractData.contractCode,
+                                selectedModel
                             })
                         });
 
                         const verifyData = await verifyResponse.json();
                         if (verifyData.success) {
                             addMessage('assistant', `Contract verified! View on FlowScan: ${verifyData.explorerUrl}`, 'Codey');
-                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${contract.address}`, 'Codey');
+                            addMessage('assistant', `To interact with this contract, please provide the contract address: ${deployedAddress}`, 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
 
                     } catch (error) {
                         console.error('Deployment error:', error);
-                        addMessage('system', `Error: ${error.message}`);
+                        addMessage('system', `Error: ${error.message}`, 'System');
                     }
                 }
                 // If Finn detects contract connection request
@@ -574,7 +615,8 @@ function ChatComponent() {
                         body: JSON.stringify({ 
                             messages,
                             userQuery: userMessage,
-                            context: { contractAddress: finnData.contractAddress }
+                            context: { contractAddress: finnData.contractAddress },
+                            selectedModel
                         })
                     });
                     const veeData = await veeResponse.json();
@@ -591,7 +633,8 @@ function ChatComponent() {
                     body: JSON.stringify({ 
                         messages,
                         userQuery: userMessage,
-                        context: { contractAddress: connectedContract }
+                        context: { contractAddress: connectedContract },
+                        selectedModel
                     })
                 });
 
@@ -620,7 +663,8 @@ function ChatComponent() {
                             messages,
                             userQuery: userMessage,
                             functionInfo: functionInfo,
-                            contractAddress: connectedContract
+                            contractAddress: connectedContract,
+                            selectedModel
                         })
                     });
 
@@ -666,20 +710,13 @@ function ChatComponent() {
         }
     };
 
-    // Update executeContractFunction to match your previous working version
+    // Keep your original executeContractFunction implementation
     const executeContractFunction = async (functionInfo, params) => {
         try {
             if (!signer || !connectedContract) {
                 throw new Error('Contract or signer not initialized');
             }
 
-            console.log('Function execution details:', {
-                functionInfo,
-                params,
-                contractAddress: connectedContract
-            });
-
-            // Create minimal ABI array with just the function we need
             const minimalABI = [{
                 name: functionInfo.name,
                 type: 'function',
@@ -690,33 +727,39 @@ function ChatComponent() {
 
             const contract = new ethers.Contract(connectedContract, minimalABI, signer);
 
-            // Handle payable functions
-            let txOptions = {};
-            let processedParams = [];
-
+            // For payable functions
             if (functionInfo.stateMutability === 'payable') {
-                const amount = params.amount || Object.values(params)[0];
-                txOptions = { value: ethers.parseEther(amount.toString()) };
-                console.log('Payable transaction:', { amount, wei: txOptions.value.toString() });
+                // Extract amount - params is now directly the amount string
+                const amount = params;
+                console.log('Deposit amount:', amount); // Debug log
+                
+                const tx = await contract[functionInfo.name]({
+                    value: ethers.parseEther(amount),
+                    gasLimit: 3000000
+                });
+                
+                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+                const receipt = await tx.wait();
+                return {
+                    success: true,
+                    message: `Transaction successful! Hash: ${receipt.hash}`,
+                    hash: receipt.hash
+                };
             } else {
-                processedParams = Object.values(params);
+                // For non-payable functions
+                const processedParams = Array.isArray(params) ? params : [params];
+                const tx = await contract[functionInfo.name](...processedParams, {
+                    gasLimit: 3000000
+                });
+                
+                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+                const receipt = await tx.wait();
+                return {
+                    success: true,
+                    message: `Transaction successful! Hash: ${receipt.hash}`,
+                    hash: receipt.hash
+                };
             }
-
-            // Execute the function
-            const tx = await contract[functionInfo.name](
-                ...processedParams,
-                txOptions
-            );
-
-            addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
-            
-            const receipt = await tx.wait();
-            
-            return {
-                success: true,
-                message: `Transaction successful! Hash: ${receipt.hash}`,
-                hash: receipt.hash
-            };
 
         } catch (error) {
             console.error('Contract execution error:', error);
@@ -771,6 +814,13 @@ function ChatComponent() {
             setCurrentChatId(null);
         }
     }, [isConnected]);
+
+    const handleTransactionComplete = (txData) => {
+        setTxPopup({
+            createTaskHash: txData.createTaskHash,
+            responseHash: txData.responseHash
+        });
+    };
 
     return (
         <div className="flex flex-col h-screen">
@@ -864,6 +914,23 @@ function ChatComponent() {
                         )}
                     </div>
 
+                    {/* AI Model Selector */}
+                    <div className="p-4 border-b">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <label className="text-sm font-medium text-gray-700">AI Model:</label>
+                                <select
+                                    value={selectedModel}
+                                    onChange={(e) => setSelectedModel(e.target.value)}
+                                    className="border rounded px-3 py-1 text-sm"
+                                >
+                                    <option value="openai">OpenAI GPT-4</option>
+                                    <option value="hyperbolic">Llama 3.3 70B</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Messages Area */}
                     <div className="flex-1 overflow-y-auto p-4">
                         {error && (
@@ -907,6 +974,13 @@ function ChatComponent() {
                         )}
                     </div>
 
+                    {/* Add this before the Input Area */}
+                    <OnChainProof 
+                        messages={messages} 
+                        signer={signer} 
+                        onTransactionComplete={handleTransactionComplete}
+                    />
+
                     {/* Input Area */}
                     <div className="p-4 border-t">
                         {!isConnected ? (
@@ -936,6 +1010,35 @@ function ChatComponent() {
                     </div>
                 </div>
             </div>
+
+            {/* Transaction Popup */}
+            {txPopup && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg p-6 max-w-lg w-full">
+                        <h3 className="text-lg font-bold mb-4">Transactions Complete!</h3>
+                        <div className="space-y-2">
+                            <p>Task Creation: <a 
+                                href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 underline"
+                            >{txPopup.createTaskHash}</a></p>
+                            <p>Operator Response: <a 
+                                href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 underline"
+                            >{txPopup.responseHash}</a></p>
+                        </div>
+                        <button 
+                            onClick={() => setTxPopup(null)}
+                            className="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

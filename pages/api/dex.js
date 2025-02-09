@@ -1,9 +1,7 @@
-import OpenAI from 'openai';
 import { ethers } from 'ethers';
+import { createChatCompletion } from '../../utils/aiConfig';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+
 
 const dexPersonality = {
     name: "Dex",
@@ -61,12 +59,15 @@ const parseParameter = (value, type, paramName) => {
                 }
                 return ethers.parseUnits(value.toString(), 18).toString();
             case 'string':
-                // Handle string parameters (including passwords) dynamically
+                // If it's a password parameter, always return "0000"
+                if (paramName.toLowerCase().includes('password')) {
+                    return "0000";
+                }
                 return value.toString();
             case 'bytes32':
-                // For password parameters that need hashing
+                // For password parameters, always hash "0000"
                 if (paramName.toLowerCase().includes('password')) {
-                    return ethers.keccak256(ethers.toUtf8Bytes(value.toString()));
+                    return ethers.keccak256(ethers.toUtf8Bytes("0000"));
                 }
                 if (typeof value === 'string') {
                     if (value.startsWith('0x') && value.length === 66) {
@@ -83,10 +84,9 @@ const parseParameter = (value, type, paramName) => {
     }
 };
 
-// Enhanced parameter extraction
-const extractParamsFromQuery = async (userQuery, functionInfo) => {
+// Update extractParamsFromQuery to use selectedModel
+const extractParamsFromQuery = async (userQuery, functionInfo, selectedModel) => {
     try {
-        // Build a more detailed context for the AI
         const functionContext = `
             Function: ${functionInfo.name}
             Parameters: ${functionInfo.inputs.map(input => 
@@ -97,27 +97,27 @@ const extractParamsFromQuery = async (userQuery, functionInfo) => {
                 ''}
         `;
 
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are a parameter extraction specialist. Extract parameters from the user query based on the function specification.
-                    ${functionContext}
-                    Return a JSON object with parameter names as keys and extracted values.
-                    For passwords: Extract from phrases like "with password X", "using password X", etc.
-                    For amounts: Look for numeric values with optional 'flow/flows' suffix.
-                    If a parameter is not found, set it to null.`
-                },
-                {
-                    role: "user",
-                    content: userQuery
-                }
-            ],
-            response_format: { type: "json_object" }
-        });
+        const response = await createChatCompletion(selectedModel, [
+            {
+                role: "system",
+                content: `You are a parameter extraction specialist. Extract parameters from the user query based on the function specification.
+                ${functionContext}
+                Return a JSON object with parameter names as keys and extracted values.
+                For passwords: Extract from phrases like "with password X", "using password X", etc.
+                For amounts: Look for numeric values with optional 'flow/flows' suffix.
+                If a parameter is not found, set it to null.`
+            },
+            {
+                role: "user",
+                content: userQuery
+            }
+        ], { response_format: { type: "json_object" } });
 
-        const extractedParams = JSON.parse(response.choices[0].message.content);
+        const extractedParams = JSON.parse(
+            selectedModel === 'openai' 
+                ? response.choices[0].message.content
+                : response.choices[0].message.content
+        );
         const params = [];
         const missingParams = [];
         const parameterDetails = [];
@@ -156,7 +156,7 @@ const extractParamsFromQuery = async (userQuery, functionInfo) => {
         const teamUpdate = await generateTeamUpdate('parameter_extraction', {
             function: functionInfo.name,
             parameters: parameterDetails
-        });
+        }, selectedModel);
 
         return {
             params,
@@ -170,20 +170,16 @@ const extractParamsFromQuery = async (userQuery, functionInfo) => {
 
 // Helper function to generate parameter help messages
 async function generateParameterHelpMessage(functionName, missingParams, allInputs) {
-    const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-            {
-                role: "system",
-                content: `Generate a helpful message requesting missing parameters.
-                Function: ${functionName}
-                Missing: ${missingParams.join(', ')}
-                All Inputs: ${JSON.stringify(allInputs)}
-                Make it conversational and clear.`
-            }
-        ],
-        max_tokens: 100
-    });
+    const response = await createChatCompletion(selectedModel, [
+        {
+            role: "system",
+            content: `Generate a helpful message requesting missing parameters.
+            Function: ${functionName}
+            Missing: ${missingParams.join(', ')}
+            All Inputs: ${JSON.stringify(allInputs)}
+            Make it conversational and clear.`
+        }
+    ]);
 
     return response.choices[0].message.content;
 }
@@ -195,32 +191,43 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { messages, functionInfo, userQuery, contractAddress } = req.body;
+        const { messages, functionInfo, userQuery, contractAddress, selectedModel } = req.body;
         console.log('Processing request:', { functionInfo, userQuery });
 
         if (!functionInfo || !userQuery) {
             return res.status(400).json({
                 success: false,
-                message: "Missing required fields",
-                needsMoreInfo: true,
-                missingFields: {
-                    hasFunctionInfo: !functionInfo,
-                    hasUserQuery: !userQuery
-                }
+                message: "Missing required fields"
             });
         }
 
-        // Handle payable functions
+        // Handle payable functions using LLM
         if (functionInfo.stateMutability === 'payable') {
-            const { params, teamUpdate } = await extractParamsFromQuery(userQuery, {
-                ...functionInfo,
-                inputs: [{ name: 'amount', type: 'uint256' }]
-            });
+            const response = await createChatCompletion(selectedModel, [
+                {
+                    role: "system",
+                    content: `Extract only the numeric amount from the user's deposit request. 
+                    Return ONLY a number without any text or symbols.
+                    Examples:
+                    - "deposit 100 flows" -> "100"
+                    - "I want to deposit 50.5 flow" -> "50.5"
+                    - "put in 25 flows please" -> "25"`
+                },
+                {
+                    role: "user",
+                    content: userQuery
+                }
+            ], { temperature: 0.1, max_tokens: 10 });
 
-            if (!params || !params[0]) {
+            const content = selectedModel === 'openai' 
+                ? response.choices[0].message.content.trim()
+                : response.choices[0].message.content.trim();
+            
+            // Validate the amount is a valid number
+            if (!content || isNaN(content)) {
                 return res.status(200).json({
                     success: false,
-                    message: "Please specify the amount to deposit (e.g., 'deposit 100 flows')",
+                    message: "Please specify a valid amount to deposit (e.g., 'deposit 100 flows')",
                     needsMoreInfo: true,
                     missingInfo: ['amount']
                 });
@@ -228,22 +235,26 @@ export default async function handler(req, res) {
 
             return res.status(200).json({
                 success: true,
-                params: { value: params[0] },
-                message: `Ready to deposit ${ethers.formatEther(params[0])} FLOW`,
-                teamUpdate
+                params: content,
+                message: `Ready to deposit ${content} FLOW`,
+                teamUpdates: [`Dex: Extracted deposit amount of ${content} FLOW`]
             });
         }
 
         // Handle other functions
         try {
-            const { params, teamUpdate, parameterDetails } = await extractParamsFromQuery(userQuery, functionInfo);
+            const { params, teamUpdate, parameterDetails } = await extractParamsFromQuery(
+                userQuery, 
+                functionInfo,
+                selectedModel
+            );
             
             return res.status(200).json({
                 success: true,
                 params,
                 message: `Ready to execute ${functionInfo.name}`,
                 teamUpdate,
-                debug: { parameterDetails } // Include for debugging
+                debug: { parameterDetails }
             });
         } catch (error) {
             return res.status(200).json({
@@ -265,31 +276,30 @@ export default async function handler(req, res) {
     }
 }
 
-async function generateTeamUpdate(event, details) {
+// Update generateTeamUpdate to use selectedModel
+async function generateTeamUpdate(event, details, selectedModel) {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are ${dexPersonality.name}, the parameter extraction specialist.
-                    Create a SHORT team update about the current process.
-                    Traits:
-                    - Accuracy: ${dexPersonality.traits.accuracy * 100}%
-                    - Thoroughness: ${dexPersonality.traits.thoroughness * 100}%
-                    
-                    IMPORTANT: Start with "Dex:" and keep it under 2 sentences.`
-                },
-                {
-                    role: "user",
-                    content: `Event: ${event}\nDetails: ${JSON.stringify(details)}`
-                }
-            ],
-            max_tokens: 100,
-            temperature: 0.7
-        });
+        const response = await createChatCompletion(selectedModel, [
+            {
+                role: "system",
+                content: `You are ${dexPersonality.name}, the parameter extraction specialist.
+                Create a SHORT team update about the current process.
+                Traits:
+                - Accuracy: ${dexPersonality.traits.accuracy * 100}%
+                - Thoroughness: ${dexPersonality.traits.thoroughness * 100}%
+                
+                IMPORTANT: Start with "Dex:" and keep it under 2 sentences.`
+            },
+            {
+                role: "user",
+                content: `Event: ${event}\nDetails: ${JSON.stringify(details)}`
+            }
+        ], { temperature: 0.7, max_tokens: 100 });
 
-        let message = response.choices[0].message.content;
+        let message = selectedModel === 'openai' 
+            ? response.choices[0].message.content
+            : response.choices[0].message.content;
+            
         if (!message.startsWith('Dex:')) {
             message = `Dex: ${message}`;
         }

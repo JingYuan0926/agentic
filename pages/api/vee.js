@@ -1,8 +1,4 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+import { createChatCompletion } from '../../utils/aiConfig';
 
 const veePersonality = {
     name: "Vee",
@@ -20,31 +16,29 @@ const veePersonality = {
     ]
 };
 
-async function generateTeamUpdate(event, details) {
+async function generateTeamUpdate(event, details, selectedModel) {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are ${veePersonality.name}, the contract function analyzer.
-                    Create a SHORT team update about the current process.
-                    Traits:
-                    - Precision: ${veePersonality.traits.precision * 100}%
-                    - Technical: ${veePersonality.traits.technical * 100}%
-                    
-                    IMPORTANT: Start with "Vee:" and keep it under 2 sentences.`
-                },
-                {
-                    role: "user",
-                    content: `Event: ${event}\nDetails: ${JSON.stringify(details)}`
-                }
-            ],
-            max_tokens: 100,
-            temperature: 0.7
-        });
+        const response = await createChatCompletion(selectedModel, [
+            {
+                role: "system",
+                content: `You are ${veePersonality.name}, the contract function analyzer.
+                Create a SHORT team update about the current process.
+                Traits:
+                - Precision: ${veePersonality.traits.precision * 100}%
+                - Technical: ${veePersonality.traits.technical * 100}%
+                
+                IMPORTANT: Start with "Vee:" and keep it under 2 sentences.`
+            },
+            {
+                role: "user",
+                content: `Event: ${event}\nDetails: ${JSON.stringify(details)}`
+            }
+        ], { temperature: 0.7, max_tokens: 100 });
 
-        let message = response.choices[0].message.content;
+        let message = selectedModel === 'openai' 
+            ? response.choices[0].message.content
+            : response.choices[0].message.content;
+            
         if (!message.startsWith('Vee:')) {
             message = `Vee: ${message}`;
         }
@@ -78,34 +72,43 @@ const buildContractContext = async (abi, address) => {
     `;
 };
 
-async function analyzeUserIntent(userQuery, contractABI, contractAddress) {
+async function analyzeUserIntent(userQuery, contractABI, contractAddress, selectedModel) {
     const contractContext = await buildContractContext(contractABI, contractAddress);
     
-    const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
+    const response = await createChatCompletion(selectedModel, [
+        {
+            role: "system",
+            content: `You are Vee, analyzing smart contract functions.
+            ${contractContext}
+            
+            Identify the most suitable function based on the user's request.
+            Return JSON with:
             {
-                role: "system",
-                content: `You are Vee, analyzing smart contract functions.
-                ${contractContext}
-                
-                Identify the most suitable function based on the user's request.
-                Return JSON with:
-                {
-                    "functionName": "exact function name",
-                    "confidence": 0-1 score,
-                    "reasoning": "why this function matches"
-                }`
-            },
-            {
-                role: "user",
-                content: userQuery
-            }
-        ],
-        response_format: { type: "json_object" }
+                "functionName": "exact function name",
+                "confidence": 0-1 score,
+                "reasoning": "why this function matches"
+            }`
+        },
+        {
+            role: "user",
+            content: userQuery
+        }
+    ], { 
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 500
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    const content = selectedModel === 'openai' 
+        ? response.choices[0].message.content
+        : response.choices[0].message.content;
+        
+    try {
+        return JSON.parse(content);
+    } catch (error) {
+        console.error('Failed to parse JSON response:', error);
+        throw new Error('Failed to analyze user intent');
+    }
 }
 
 // Helper function to get ABI from cache or fetch from contract
@@ -133,19 +136,19 @@ const getContractABI = async (contractAddress) => {
 };
 
 export default async function handler(req, res) {
-    const logs = [];
-    const teamUpdates = [];
-
     if (req.method !== 'POST') {
         return res.status(405).json({ message: 'Method not allowed' });
     }
 
+    const { messages, userQuery, context, selectedModel } = req.body;
+    const logs = [];
+    const teamUpdates = [];
+
     try {
-        const { messages, userQuery, context } = req.body;
         const contractAddress = context?.contractAddress;
 
         if (!contractAddress) {
-            teamUpdates.push(await generateTeamUpdate("no_contract", {}));
+            teamUpdates.push(await generateTeamUpdate("no_contract", {}, selectedModel));
             return res.status(400).json({
                 success: false,
                 message: "No contract address provided",
@@ -153,17 +156,16 @@ export default async function handler(req, res) {
             });
         }
 
-        // Fetch ABI using the helper function
         try {
             const contractABI = await getContractABI(contractAddress);
             
             teamUpdates.push(await generateTeamUpdate("abi_fetched", { 
                 message: "Contract ABI fetched successfully",
                 address: contractAddress 
-            }));
+            }, selectedModel));
 
-            // Analyze user intent
-            const analysis = await analyzeUserIntent(userQuery, contractABI, contractAddress);
+            // Analyze user intent with selected model
+            const analysis = await analyzeUserIntent(userQuery, contractABI, contractAddress, selectedModel);
             
             // Find matching function in ABI
             const targetFunction = contractABI.find(item => 
@@ -173,7 +175,7 @@ export default async function handler(req, res) {
             if (!targetFunction) {
                 teamUpdates.push(await generateTeamUpdate("function_not_found", {
                     query: userQuery
-                }));
+                }, selectedModel));
                 return res.status(400).json({
                     success: false,
                     message: "Function not found in contract",
@@ -184,7 +186,7 @@ export default async function handler(req, res) {
             if (analysis.confidence < 0.7) {
                 teamUpdates.push(await generateTeamUpdate("low_confidence", { 
                     confidence: analysis.confidence 
-                }));
+                }, selectedModel));
                 return res.status(200).json({
                     success: false,
                     message: "Could not confidently identify function. Please be more specific.",
@@ -195,7 +197,7 @@ export default async function handler(req, res) {
             teamUpdates.push(await generateTeamUpdate("function_identified", {
                 function: targetFunction.name,
                 message: `Found matching function ${targetFunction.name}, passing to Dex for parameter extraction.`
-            }));
+            }, selectedModel));
 
             // Return function details to Dex
             return res.status(200).json({
@@ -224,7 +226,7 @@ export default async function handler(req, res) {
 
         } catch (error) {
             console.error('ABI fetch error:', error);
-            teamUpdates.push(await generateTeamUpdate("abi_error", { error: error.message }));
+            teamUpdates.push(await generateTeamUpdate("abi_error", { error: error.message }, selectedModel));
             return res.status(500).json({
                 success: false,
                 message: "Failed to fetch contract ABI",
@@ -234,7 +236,7 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('Vee Error:', error);
-        teamUpdates.push(await generateTeamUpdate("error", { error: error.message }));
+        teamUpdates.push(await generateTeamUpdate("error", { error: error.message }, selectedModel));
         return res.status(500).json({
             success: false,
             message: error.message,
