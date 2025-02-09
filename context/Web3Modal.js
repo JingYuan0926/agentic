@@ -44,10 +44,10 @@ createWeb3Modal({
   themeMode: 'light',
   themeVariables: {
     '--w3m-font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"',
-    '--w3m-accent-color': '#000000',
-    '--w3m-accent-fill-color': '#000000',
+    '--w3m-accent-color': '#823EE4',
+    '--w3m-accent-fill-color': '#823EE4',
     '--w3m-background-color': '#FFFFFF',
-    '--w3m-overlay-background-color': 'rgba(0, 0, 0, 0.3)',
+    '--w3m-overlay-background-color': 'rgba(130, 62, 228, 0.1)',
     '--w3m-background-border-radius': '12px',
     '--w3m-container-border-radius': '16px',
     '--w3m-wallet-icon-border-radius': '8px',
@@ -70,18 +70,16 @@ createWeb3Modal({
     '--w3m-text-small-regular-size': '14px',
     '--w3m-text-small-bold-size': '14px',
     '--w3m-text-medium-regular-size': '16px',
-    '--w3m-color-fg-1': '#000000',
-    '--w3m-color-fg-2': '#787878',
-    '--w3m-color-fg-3': '#A5A5A5',
+    '--w3m-color-fg-1': '#823EE4',
+    '--w3m-color-fg-2': '#9D6EEB',
+    '--w3m-color-fg-3': '#B79EF2',
     '--w3m-color-bg-1': '#FFFFFF',
-    '--w3m-color-bg-2': '#F5F5F5',
-    '--w3m-color-bg-3': '#E6E6E6',
-    '--w3m-color-overlay': '#00000010'
+    '--w3m-color-bg-2': '#F9E9FB',
+    '--w3m-color-bg-3': '#E0CCFF',
+    '--w3m-color-overlay': 'rgba(130, 62, 228, 0.1)'
   }
 })
 
-function Web3ModalProvider({ children }) {
+export function Web3Modal({ children }) {
   return children
 }
-
-export default Web3ModalProvider

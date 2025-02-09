@@ -1,12 +1,14 @@
 import "@/styles/globals.css";
-import Web3ModalProvider from "../context/Web3Modal";
+import { Web3Modal } from '../context/Web3Modal'
 import '../styles/chatbot.css'
 
 function App({ Component, pageProps }) {
   return (
-    <Web3ModalProvider>
-      <Component {...pageProps} />
-    </Web3ModalProvider>
+    <Web3Modal>
+      <div className="min-h-screen bg-gradient-to-br from-[#9DF1F2] via-[#F9E9FB] to-[#E0CCFF] overflow-hidden">
+        <Component {...pageProps} />
+      </div>
+    </Web3Modal>
   );
 }
 

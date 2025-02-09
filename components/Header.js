@@ -40,7 +40,7 @@ function Header() {
     if (!mounted) return null;
 
     return (
-        <nav className="w-full flex justify-between items-center p-4 border-b bg-white dark:bg-gray-800 dark:border-gray-700">
+        <nav className="w-full flex justify-between items-center p-4 border-b bg-white/80 backdrop-blur-sm dark:bg-gray-800/80 dark:border-gray-700">
             <div className="h-8 relative p-0">
                 <img
                     src="/logo.png"
@@ -53,19 +53,19 @@ function Header() {
                 {isConnected ? (
                     <>
                         <button 
-                            className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            className="px-4 py-2 rounded-lg border border-[#823EE4] text-[#823EE4] hover:bg-[#E0CCFF]/20 transition-colors"
                             onClick={() => open({ view: 'Account' })}
                         >
                             {formatAddress(address)}
                         </button>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                        <div className="text-sm text-[#823EE4] font-medium">
                             {Number(balance).toFixed(4)} FLOW
                         </div>
                     </>
                 ) : (
                     <button 
                         onClick={() => open()}
-                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-4 py-2 bg-gradient-to-r from-[#823EE4] to-[#37DDDF] text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#823EE4]"
                     >
                         Connect Wallet
                     </button>

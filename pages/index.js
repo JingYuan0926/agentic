@@ -27,7 +27,7 @@ export default function AIInterface() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#E0FFFF] to-[#E0FFFF]" style={{ fontFamily: 'Epilogue, sans-serif' }}>
+        <div className="h-screen overflow-hidden" style={{ fontFamily: 'Epilogue, sans-serif' }}>
             <Head>
                 <title>4 Human 1 AI</title>
                 <link
@@ -38,8 +38,8 @@ export default function AIInterface() {
 
             <Header />
 
-            <main className="container mx-auto max-w-6xl px-4">
-                <div className="flex flex-col items-center justify-center min-h-screen">
+            <main className="container mx-auto max-w-6xl px-4 h-[calc(100vh-73px)]">
+                <div className="flex flex-col items-center justify-center h-full">
                     <div className="text-center w-full">
                         <div className="space-y-0">
                             <h1 className="text-6xl font-bold bg-gradient-to-r from-[#823EE4] via-[#99BBFF] to-[#00EF8B] inline-block text-transparent bg-clip-text mb-0">
@@ -93,10 +93,10 @@ export default function AIInterface() {
                                 <div className="flex items-end gap-2 relative">
                                     {/* White background div */}
                                     <div 
-                                        className="absolute inset-0 bg-white rounded-lg"
+                                        className="absolute inset-0 bg-white rounded-xl"
                                         style={{
                                             width: 'calc(100% - 52px)',
-                                            height: '50px'
+                                            height: '49px'
                                         }}
                                     />
                                     
