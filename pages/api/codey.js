@@ -106,7 +106,8 @@ export default async function handler(req, res) {
                 15. Make sure the contract is secure and cannot be exploited
                 16. Make sure the contract is easy to understand and use
                 17. Make sure the contract is easy to deploy and test
-                18. Use payable for functions that involve transactions`
+                18. Use payable for functions that involve transactions
+                19. Dont use constructor, use initialize function`
             },
             {
                 role: "user",
