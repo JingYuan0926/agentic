@@ -1162,13 +1162,19 @@ function ChatComponent() {
                             <button
                                 onClick={handleSendMessage}
                                 disabled={isLoading || !input.trim() || !isConnected}
-                                className={`p-3 rounded-full ${
-                                    !isConnected 
-                                        ? 'bg-gray-300 cursor-not-allowed' 
-                                        : 'bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300'
+                                className={`p-3 rounded-full relative ${
+                                    !isConnected || !input.trim()
+                                        ? 'bg-gray-200 cursor-not-allowed' // Disabled state
+                                        : isLoading
+                                            ? 'bg-blue-400 cursor-wait' // Loading state
+                                            : 'bg-blue-500 hover:bg-blue-600' // Normal state
                                 } text-white`}
                             >
-                                <FiSend size={20} />
+                                {isLoading ? (
+                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <FiSend size={20} />
+                                )}
                             </button>
                         </div>
                     </div>
