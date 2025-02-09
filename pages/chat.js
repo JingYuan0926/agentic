@@ -962,7 +962,7 @@ function ChatComponent() {
                                         <FiMenu size={24} className={!isConnected ? 'text-gray-400' : ''} />
                                     </button>
                                 </DropdownTrigger>
-                                <DropdownMenu>
+                                <DropdownMenu aria-label="Model Selection">
                                     {!isConnected ? (
                                         <DropdownItem>
                                             <div className="text-gray-500">
@@ -979,16 +979,34 @@ function ChatComponent() {
                                         chatHistory.map((chat) => (
                                             <DropdownItem 
                                                 key={chat.id}
-                                                onClick={() => selectChat(chat.id)}
+                                                className="flex justify-between items-center group"
                                             >
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-medium truncate">
-                                                        {chat.messages[0]?.content || 'New Chat'}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">
-                                                        {new Date(chat.timestamp).toLocaleDateString()}
-                                                    </span>
+                                                <div 
+                                                    className="flex-1 cursor-pointer"
+                                                    onClick={() => selectChat(chat.id)}
+                                                >
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-medium truncate">
+                                                            {chat.messages[0]?.content || 'New Chat'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">
+                                                            {new Date(chat.timestamp).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
                                                 </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteChat(chat.id);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-600 p-1"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M3 6h18"></path>
+                                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                                    </svg>
+                                                </button>
                                             </DropdownItem>
                                         ))
                                     )}
