@@ -1,6 +1,14 @@
 import { ethers } from 'ethers';
 import { useState } from 'react';
 import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
+import {
+    Modal,
+    ModalContent,
+    ModalHeader,
+    ModalBody,
+    ModalFooter,
+    Button,
+} from "@heroui/react";
 
 // ABI matching exactly with respondToTask.js
 const abi = [
@@ -17,6 +25,7 @@ const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
 export default function OnChainProof({ messages, signer, onTransactionComplete }) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const { switchToHolesky } = useNetworkSwitch();
 
     const generateProof = async () => {
@@ -126,34 +135,90 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
 
     return (
         <div className="mt-4">
-            <button
-                onClick={generateProof}
+            <Button
+                onClick={() => setIsModalOpen(true)}
                 disabled={isLoading || !messages.length || !signer}
-                className={`w-full px-4 py-2 rounded ${
+                className={`w-full ${
                     isLoading || !signer || !messages.length
                         ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-green-500 hover:bg-green-600'
-                } text-white transition-colors flex items-center justify-center gap-2`}
+                        : 'bg-gradient-to-r from-[#823EE4] to-[#37DDDF]'
+                } text-white`}
             >
-                {isLoading ? (
-                    <>
-                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Generating Proof...</span>
-                    </>
-                ) : !signer ? (
-                    'Connect Wallet First'
-                ) : !messages.length ? (
-                    'No Messages to Prove'
-                ) : (
-                    'Generate On-Chain Proof'
-                )}
-            </button>
-            {error && (
-                <p className="text-red-500 text-sm mt-2">{error}</p>
-            )}
+                {isLoading ? 'Generating...' : 'Generate On-Chain Proof'}
+            </Button>
+
+            <Modal 
+                isOpen={isModalOpen} 
+                onOpenChange={setIsModalOpen}
+                placement="center"
+                backdrop="blur"
+            >
+                <ModalContent>
+                    {(onClose) => (
+                        <>
+                            <ModalHeader className="flex flex-col gap-1">
+                                Generate On-Chain Proof
+                            </ModalHeader>
+                            <ModalBody>
+                                <div className="flex flex-col items-center text-center gap-4">
+                                    <div className="bg-purple-100 rounded-full p-4">
+                                        <svg 
+                                            width="24" 
+                                            height="24" 
+                                            viewBox="0 0 24 24" 
+                                            fill="none" 
+                                            className="text-purple-600"
+                                            stroke="currentColor" 
+                                            strokeWidth="2"
+                                        >
+                                            <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                                            <path d="M2 17L12 22L22 17" />
+                                            <path d="M2 12L12 17L22 12" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-xl font-semibold text-gray-900">
+                                        Confirm Proof Generation
+                                    </h3>
+                                    <p className="text-gray-600">
+                                        This will generate an on-chain proof of your conversation. 
+                                        The process requires one transaction to be signed.
+                                    </p>
+                                    {error && (
+                                        <p className="text-red-500 text-sm mt-2">{error}</p>
+                                    )}
+                                </div>
+                            </ModalBody>
+                            <ModalFooter>
+                                <Button 
+                                    color="danger" 
+                                    variant="light" 
+                                    onPress={onClose}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    color="primary"
+                                    onPress={() => {
+                                        generateProof();
+                                        onClose();
+                                    }}
+                                    isLoading={isLoading}
+                                    className="bg-gradient-to-r from-[#823EE4] to-[#37DDDF] text-white"
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <span className="animate-spin mr-2">⚡</span>
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        'Generate Proof'
+                                    )}
+                                </Button>
+                            </ModalFooter>
+                        </>
+                    )}
+                </ModalContent>
+            </Modal>
         </div>
     );
 } 

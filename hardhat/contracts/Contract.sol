@@ -1,43 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple contract for managing funds with password protection
+/// @title A simple counter contract
+/// @notice This contract allows users to increment, decrement, and reset a counter
 contract Contract {
-    bytes32 private passwordHash;
-    address private owner;
+    uint256 private counter;
+    event CounterUpdated(uint256 newCounter);
 
-    event FundsDeposited(address indexed sender, uint256 amount);
-    event FundsWithdrawn(address indexed recipient, uint256 amount);
-
-    /// @notice Initializes the contract setting the owner and password hash
-    function initialize() external {
-        require(owner == address(0), "Contract is already initialized");
-        owner = msg.sender;
-        passwordHash = keccak256(abi.encodePacked("0000")); // Set initial password hash
+    /// @notice Initializes the counter to zero
+    function initialize() public {
+        counter = 0;
+        emit CounterUpdated(counter);
     }
 
-    /// @notice Allows the owner to deposit funds into the contract
-    function deposit() external payable {
-        require(msg.value > 0, "Must send ETH to deposit");
-        emit FundsDeposited(msg.sender, msg.value);
+    /// @notice Increments the counter by one
+    function increment() public {
+        counter += 1;
+        emit CounterUpdated(counter);
     }
 
-    /// @notice Allows the owner to withdraw funds from the contract
-    /// @param _password The password to authorize withdrawal
-    function withdraw(string calldata _password) external {
-        require(msg.sender == owner, "Only owner can withdraw");
-        require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
-
-        uint256 balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
-
-        payable(owner).transfer(balance);
-        emit FundsWithdrawn(owner, balance);
+    /// @notice Decrements the counter by one
+    /// @dev Will revert if the counter is already zero
+    function decrement() public {
+        require(counter > 0, "Counter is already zero");
+        counter -= 1;
+        emit CounterUpdated(counter);
     }
 
-    /// @notice Returns the current balance of the contract
-    /// @return The balance of the contract
-    function getBalance() external view returns (uint256) {
-        return address(this).balance;
+    /// @notice Resets the counter to zero
+    function reset() public {
+        counter = 0;
+        emit CounterUpdated(counter);
+    }
+
+    /// @notice Returns the current value of the counter
+    /// @return The current counter value
+    function getCounter() public view returns (uint256) {
+        return counter;
     }
 }
