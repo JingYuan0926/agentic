@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3Modal, useWeb3ModalAccount, useWeb3ModalProvider } from '@web3modal/ethers/react';
 import dynamic from 'next/dynamic';
-import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
 import OnChainProof from '../components/OnChainProof';
 import { Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/dropdown";
@@ -12,6 +11,9 @@ import { FiMenu, FiSend } from 'react-icons/fi';
 import Header from '../components/Header';
 import AvatarGrid from '../components/AvatarGrid';
 import { Link } from "@heroui/link";
+import { NilQLWrapper } from 'nillion-sv-wrappers';
+import ChatHistorySidebar from '../components/ChatHistorySidebar';
+import TransactionModal from '../components/TransactionModal';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -54,15 +56,6 @@ function ChatComponent() {
     const [chatHistory, setChatHistory] = useState([]);
     const [currentChatId, setCurrentChatId] = useState(Date.now().toString());
 
-    // Add nilQL wrapper state
-    const [nilQLWrapper, setNilQLWrapper] = useState(null);
-
-    // Add refresh trigger for chat history
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-    // Add new state for transaction popup
-    const [txPopup, setTxPopup] = useState(null);
-
     // Add this near the top with other state declarations
     const [selectedModel, setSelectedModel] = useState('openai'); // 'openai' or 'hyperbolic'
 
@@ -88,6 +81,9 @@ function ChatComponent() {
 
     // Add new state for proof loading at component level
     const [proofLoadingStates, setProofLoadingStates] = useState({});
+
+    // Add this line to fix the error
+    const [txPopup, setTxPopup] = useState(null);
 
     // Add this effect at the top level of your component
     useEffect(() => {
@@ -146,100 +142,14 @@ function ChatComponent() {
         }
     }, [messages, teamUpdates]);
 
-    // Initialize nilQL wrapper
-    useEffect(() => {
-        const initNilQL = async () => {
-            const cluster = {
-                nodes: [{}, {}, {}] // Three nodes for encryption
-            };
-            const wrapper = new NilQLWrapper(cluster);
-            await wrapper.init();
-            setNilQLWrapper(wrapper);
-        };
-        initNilQL();
-    }, []);
-
-    // Modify loadChatHistory to properly handle async operations
+    // Modify loadChatHistory to remove Nillion functionality
     const loadChatHistory = async () => {
-        if (!isConnected || !address || !nilQLWrapper) return;
+        if (!isConnected || !address) return;
         
         try {
-            const response = await fetch('/api/nillion-test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'readAll',
-                    walletAddress: address
-                }),
-            });
-
-            if (!response.ok) throw new Error('Failed to load chat history');
+            // For now, just set empty chat history
+            setChatHistory([]);
             
-            const data = await response.json();
-            console.log('📖 Read Result:', data);
-            
-            if (Array.isArray(data)) {
-                const processMessage = async (item) => {
-                    if (item.walletAddress !== address) return null;
-                    
-                    try {
-                        const messageData = JSON.parse(item.message);
-                        const chatId = messageData.chatId || item.chatId;
-                        
-                        let content = messageData.content;
-                        if (content && content.$allot) {
-                            content = await decryptMessage(content);
-                        }
-
-                        return {
-                            chatId,
-                            message: {
-                                role: messageData.role,
-                                content: content,
-                                agent: messageData.agent,
-                                timestamp: messageData.timestamp
-                            },
-                            timestamp: new Date(item.timestamp).getTime(),
-                            walletAddress: item.walletAddress
-                        };
-                    } catch (e) {
-                        console.error('Failed to parse message:', e);
-                        return null;
-                    }
-                };
-
-                // Process all messages in parallel
-                const processedMessages = await Promise.all(data.map(processMessage));
-                
-                // Group messages by chatId
-                const chatGroups = processedMessages.reduce((acc, item) => {
-                    if (!item) return acc;
-                    
-                    if (!acc[item.chatId]) {
-                        acc[item.chatId] = {
-                            id: item.chatId,
-                            messages: [],
-                            timestamp: item.timestamp,
-                            walletAddress: item.walletAddress
-                        };
-                    }
-                    
-                    acc[item.chatId].messages.push(item.message);
-                    return acc;
-                }, {});
-
-                // Convert to array and sort by timestamp
-                const sortedChats = Object.values(chatGroups)
-                    .sort((a, b) => b.timestamp - a.timestamp);
-
-                setChatHistory(sortedChats);
-                
-                // Set current chat if none selected
-                if (sortedChats.length > 0 && !currentChatId) {
-                    setCurrentChatId(sortedChats[0].id);
-                    setMessages(sortedChats[0].messages);
-                }
-            }
         } catch (error) {
             console.error('Failed to load chat history:', error);
             addMessage('system', 'Failed to load chat history');
@@ -309,41 +219,15 @@ function ChatComponent() {
         }
     };
 
-    // Modify addMessage function to include encryption
+    // Modify addMessage to remove encryption
     const addMessage = async (role, content, agent = null) => {
-        if (!isConnected || !address || !nilQLWrapper) return;
+        if (!isConnected || !address) return;
         
         try {
             const timestamp = Date.now();
-            
-            // Encrypt the content
-            const encryptedContent = await nilQLWrapper.encrypt(content);
-            console.log('🔒 Encrypting message...');
-
-            const messageData = {
-                role,
-                content: { $allot: encryptedContent },
-                agent,
-                timestamp,
-                chatId: currentChatId || timestamp.toString()
-            };
-
-            const response = await fetch('/api/nillion-test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'store',
-                    walletAddress: address,
-                    message: JSON.stringify(messageData)
-                }),
-            });
-
-            if (!response.ok) {
-                console.error('Store error:', response.status);
-            }
+            const newMessage = { role, content, agent, timestamp };
             
             // Update local state immediately
-            const newMessage = { role, content, agent, timestamp };
             setMessages(prev => [...prev, newMessage]);
 
             // Update chat history if needed
@@ -358,8 +242,6 @@ function ChatComponent() {
                 }, ...prev]);
             }
 
-            console.log('💾 Message stored successfully');
-
             // Update active agent when AI responds
             if (agent) {
                 const agentMap = {
@@ -370,35 +252,16 @@ function ChatComponent() {
                 };
                 setActiveAgent(agentMap[agent]);
                 
-                // Wait for message to be processed before resetting agent
                 await new Promise(resolve => setTimeout(resolve, 100));
                 setActiveAgent(null);
             }
 
-            return messageData.chatId;
+            return timestamp.toString();
         } catch (error) {
             console.error('Message error:', error);
-            // Still update local state even if there's an error
-            const newMessage = { role, content, agent, timestamp: Date.now() };
-            setMessages(prev => [...prev, newMessage]);
-            // Ensure agent is reset even on error
+            setMessages(prev => [...prev, { role, content, agent, timestamp: Date.now() }]);
             setActiveAgent(null);
             throw error;
-        }
-    };
-
-    // Add decryption helper function
-    const decryptMessage = async (encryptedContent) => {
-        try {
-            if (encryptedContent && encryptedContent.$allot) {
-                const decryptedContent = await nilQLWrapper.decrypt(encryptedContent.$allot);
-                console.log('🔓 Message decrypted');
-                return decryptedContent;
-            }
-            return encryptedContent; // Return as-is if not encrypted
-        } catch (error) {
-            console.error('Failed to decrypt message:', error);
-            return 'Encrypted message (cannot decrypt)';
         }
     };
 
@@ -825,41 +688,12 @@ function ChatComponent() {
         }
     };
 
-    // Add proper delete functionality
-    const handleDeleteChat = async (chatId) => {
-        if (!isConnected || !address) return;
-        
-        try {
-            const response = await fetch('/api/nillion-test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'delete',
-                    walletAddress: address,
-                    chatId: chatId
-                }),
-            });
-
-            if (response.ok) {
-                // Update local state
-                setChatHistory(prev => prev.filter(chat => chat.id !== chatId));
-                if (currentChatId === chatId) {
-                    setCurrentChatId(null);
-                    setMessages([]);
-                }
-                console.log('🗑️ Chat deleted:', chatId);
-            }
-        } catch (error) {
-            console.error('Failed to delete chat:', error);
-        }
-    };
-
     // Add refresh trigger for chat history
     useEffect(() => {
-        if (isClient && isConnected && address && nilQLWrapper) {
+        if (isClient && isConnected && address) {
             loadChatHistory();
         }
-    }, [isClient, isConnected, address, nilQLWrapper, refreshTrigger]);
+    }, [isClient, isConnected, address]);
 
     // Add delete button to chat messages and handle wallet disconnect
     useEffect(() => {
@@ -955,6 +789,120 @@ function ChatComponent() {
             handleInitialMessage();
         }
     }, [isConnected]); // Simplified dependencies
+
+    // Initialize nilQL wrapper
+    const [nilQLWrapper, setNilQLWrapper] = useState(null);
+    useEffect(() => {
+        const initNilQL = async () => {
+            const cluster = {
+                nodes: [{}, {}, {}] // Three nodes for encryption
+            };
+            const wrapper = new NilQLWrapper(cluster);
+            await wrapper.init();
+            setNilQLWrapper(wrapper);
+        };
+        initNilQL();
+    }, []);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!input.trim() || !isConnected || !nilQLWrapper) return;
+
+        setIsLoading(true);
+        try {
+            // Add user message
+            const userMessage = { role: 'user', content: input };
+            const encryptedUserContent = await nilQLWrapper.encrypt(input);
+            
+            // Store user message
+            const messageData = {
+                messages: [{
+                    ...userMessage,
+                    content: { $allot: encryptedUserContent }
+                }],
+                title: input.substring(0, 30) + '...'
+            };
+
+            const storeResponse = await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'store',
+                    walletAddress: address,
+                    message: JSON.stringify(messageData),
+                    chatId: currentChatId || undefined
+                }),
+            });
+
+            if (!storeResponse.ok) throw new Error('Failed to store message');
+            const result = await storeResponse.json();
+            
+            if (!currentChatId) {
+                setCurrentChatId(result.chatId);
+            }
+
+            setMessages(prev => [...prev, userMessage]);
+            setInput('');
+
+            // Get AI response
+            const aiResponse = await fetch('/api/ai-response', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: input }),
+            });
+
+            if (!aiResponse.ok) throw new Error('Failed to get AI response');
+            const aiData = await aiResponse.json();
+
+            // Encrypt and store AI response
+            const encryptedAiContent = await nilQLWrapper.encrypt(aiData.response);
+            const aiMessage = { role: 'assistant', content: aiData.response };
+            
+            messageData.messages.push({
+                ...aiMessage,
+                content: { $allot: encryptedAiContent }
+            });
+
+            // Store updated conversation
+            await fetch('/api/nillion-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'store',
+                    walletAddress: address,
+                    message: JSON.stringify(messageData),
+                    chatId: result.chatId || currentChatId
+                }),
+            });
+
+            setMessages(prev => [...prev, aiMessage]);
+
+        } catch (error) {
+            console.error('Error:', error);
+            setMessages(prev => [...prev, {
+                role: 'system',
+                content: `Error: ${error.message}`,
+                isError: true
+            }]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleChatSelect = async (selectedChat) => {
+        if (!selectedChat || !selectedChat.messages) {
+            setMessages([]);
+            setCurrentChatId(null);
+            return;
+        }
+
+        setCurrentChatId(selectedChat.id);
+        setMessages(selectedChat.messages);
+        setIsSidebarOpen(false);
+    };
+
+    // Add new state for chat history drawer
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     return (
         <div className="flex flex-col h-screen">
@@ -1111,7 +1059,7 @@ function ChatComponent() {
                                                 <img 
                                                     src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
                                                     alt={message.agent || 'Finn'}
-                                                    className="w-8 h-8 rounded-full"
+                                                    className="w-8 h-8 rounded-full border border-gray-700"
                                                 />
                                                 <div className="text-sm font-medium text-gray-600 mt-1">
                                                     {message.agent || 'Finn'}
@@ -1188,45 +1136,28 @@ function ChatComponent() {
             </div>
 
             {/* Transaction Popup */}
-            {txPopup && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-                        <h3 className="text-lg font-bold mb-4">Verified on Chain! 🎉</h3>
-                        <div className="space-y-3">
-                            <div>
-                                <p className="text-gray-600 mb-1">Task Creation:</p>
-                                <Link 
-                                    href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
-                                    isExternal
-                                    showAnchorIcon
-                                    color="primary"
-                                    className="hover:opacity-70"
-                                >
-                                    View on Explorer
-                                </Link>
-                            </div>
-                            <div>
-                                <p className="text-gray-600 mb-1">Operator Response:</p>
-                                <Link 
-                                    href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
-                                    isExternal
-                                    showAnchorIcon
-                                    color="primary"
-                                    className="hover:opacity-70"
-                                >
-                                    View on Explorer
-                                </Link>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => setTxPopup(null)}
-                            className="mt-6 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                        >
-                            Close
-                        </button>
-                    </div>
-                </div>
+            <TransactionModal 
+                txData={txPopup} 
+                onClose={() => setTxPopup(null)} 
+            />
+
+            {/* Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 z-40"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
             )}
+
+            {/* Sliding Sidebar */}
+            <div className={`fixed left-0 top-0 h-full bg-white shadow-xl z-50 transition-transform duration-300 transform ${
+                isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}>
+                <ChatHistorySidebar
+                    onChatSelect={handleChatSelect}
+                    selectedChatId={currentChatId}
+                />
+            </div>
         </div>
     );
 }

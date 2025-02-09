@@ -90,43 +90,29 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
             const taskIndex = event.args[0];
             console.log('Task Index:', taskIndex);
 
-            // Initialize operator wallet
-            if (!process.env.OPERATOR_PRIVATE_KEY) {
-                throw new Error('Operator private key not configured');
-            }
-            const operatorWallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY, provider);
-            
-            // Create operator signature
-            const messageHash = ethers.keccak256(
-                ethers.solidityPacked(
-                    ['bool', 'bytes32'],
-                    [true, hashBeforeSign]
-                )
-            );
-            const operatorSignature = await operatorWallet.signMessage(ethers.getBytes(messageHash));
-
-            // Submit operator response
-            const operatorContract = contract.connect(operatorWallet);
-            const responseTx = await operatorContract.respondToTask(
-                {
+            // Call operator response API
+            const operatorResponse = await fetch('/api/operator-response', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taskIndex: taskIndex.toString(),
                     hashBeforeSign,
                     signature
-                },
-                taskIndex,
-                "Verified",
-                operatorSignature,
-                { gasLimit: 500000 }
-            );
+                })
+            });
 
-            console.log('Response transaction sent:', responseTx.hash);
-            const responseReceipt = await responseTx.wait();
-            console.log('Response receipt:', responseReceipt);
+            if (!operatorResponse.ok) {
+                const error = await operatorResponse.json();
+                throw new Error(error.message || 'Failed to get operator response');
+            }
+
+            const operatorData = await operatorResponse.json();
 
             // Call the callback with transaction data
             if (onTransactionComplete) {
                 onTransactionComplete({
                     createTaskHash: tx.hash,
-                    responseHash: responseTx.hash
+                    responseHash: operatorData.transactionHash
                 });
             }
 

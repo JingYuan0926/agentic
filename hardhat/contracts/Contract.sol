@@ -1,34 +1,43 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title A simple counter contract
-/// @notice This contract allows users to increment, decrement, and retrieve a counter value
+/// @title A simple contract for managing funds with password protection
 contract Contract {
-    uint256 private counter;
+    bytes32 private passwordHash;
+    address private owner;
 
-    event CounterUpdated(uint256 newCounter);
+    event FundsDeposited(address indexed sender, uint256 amount);
+    event FundsWithdrawn(address indexed recipient, uint256 amount);
 
-    /// @dev Initializes the counter to zero
+    /// @notice Initializes the contract setting the owner and password hash
     function initialize() external {
-        counter = 0;
+        require(owner == address(0), "Contract is already initialized");
+        owner = msg.sender;
+        passwordHash = keccak256(abi.encodePacked("0000")); // Set initial password hash
     }
 
-    /// @notice Increments the counter by one
-    function increment() external {
-        counter++;
-        emit CounterUpdated(counter);
+    /// @notice Allows the owner to deposit funds into the contract
+    function deposit() external payable {
+        require(msg.value > 0, "Must send ETH to deposit");
+        emit FundsDeposited(msg.sender, msg.value);
     }
 
-    /// @notice Decrements the counter by one
-    /// @dev Reverts if the counter is already zero
-    function decrement() external {
-        require(counter > 0, "Counter cannot be negative");
-        counter--;
-        emit CounterUpdated(counter);
+    /// @notice Allows the owner to withdraw funds from the contract
+    /// @param _password The password to authorize withdrawal
+    function withdraw(string calldata _password) external {
+        require(msg.sender == owner, "Only owner can withdraw");
+        require(keccak256(abi.encodePacked(_password)) == passwordHash, "Invalid password");
+
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No funds to withdraw");
+
+        payable(owner).transfer(balance);
+        emit FundsWithdrawn(owner, balance);
     }
 
-    /// @return The current counter value
-    function getCounter() external view returns (uint256) {
-        return counter;
+    /// @notice Returns the current balance of the contract
+    /// @return The balance of the contract
+    function getBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 }
