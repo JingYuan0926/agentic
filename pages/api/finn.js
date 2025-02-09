@@ -53,12 +53,17 @@ async function generateTeamResponse(intent, message, contractDetails, selectedMo
                 - Dex: Extracts function parameters
                 - Guard: Monitors security
                 
-                When users describe desired functionality (like transfers with PINs, 
-                time locks, or security features), direct to Codey for contract creation.
+                When users describe any of these scenarios, direct to Codey:
+                - Transfers requiring passwords/PINs
+                - Time-based conditions
+                - Multi-party approvals
+                - Custom access controls
+                - Any conditional transfers
+                - Friend/family payment scenarios with conditions
                 
                 Based on the intent "${intent}" and contract status, coordinate the team:
-                - For "generate": Direct to Codey and mention the specific feature to be implemented
-                - For "connect": Direct to Vee and Dex for contract interaction
+                - For "generate": Direct to Codey and mention the specific feature
+                - For "connect": Direct to Vee and Dex for interaction
                 - For "invalid": Guide the user appropriately
                 
                 Contract Status: ${contractDetails ? 'Connected' : 'Not Connected'}
@@ -76,13 +81,36 @@ async function generateTeamResponse(intent, message, contractDetails, selectedMo
             ? response.choices[0].message.content
             : response.choices[0].message.content;
             
-        // Remove any "Finn:", "Guardian:", etc. prefixes
-        responseText = responseText.replace(/^(Finn|Guardian|System):\s*/i, '');
-        return responseText;
+        return responseText.replace(/^(Finn|Guardian|System):\s*/i, '');
     } catch (error) {
-        return `Directing this to Codey to create a secure contract with your specified requirements!`;
+        return `I'll help create a secure contract for your password-protected transfer!`;
     }
 }
+
+// Modify the intent detection system prompt
+const intentClassificationPrompt = `Classify user intentions for smart contract interactions. Look for both explicit and implicit contract needs:
+
+1. "generate" - Any of these cases:
+   - Explicit contract creation requests
+   - Password/PIN protected transfers
+   - Time-locked transfers
+   - Friend/family payments with conditions
+   - Transfers with approvals
+   - Any conditional money movement
+   - Phrases like "send money if/when"
+   - Mentions of security requirements
+   - Custom payment flows
+   
+2. "invalid" - Completely unrelated requests
+
+Examples:
+- "I want to send money to my friend with a password" -> "generate"
+- "Transfer ETH when my friend enters 1234" -> "generate"
+- "Send funds after approval" -> "generate"
+- "What's the weather?" -> "invalid"
+
+Look carefully for implied contract needs in simple transfer requests.
+Respond ONLY with "generate" or "invalid".`;
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -151,25 +179,7 @@ export default async function handler(req, res) {
         const response = await createChatCompletion(selectedModel, [
             {
                 role: 'system',
-                content: `Classify user intentions for smart contract interactions:
-                1. "generate" - Any of these cases:
-                   - Explicit contract creation requests
-                   - Descriptions of desired contract functionality
-                   - Security or access control requirements
-                   - Transfer with conditions
-                   - Funds with password/PIN protection
-                   - Time-locked transfers
-                   - Custom payment flows
-                   - Any functionality that would require a new contract
-                2. "invalid" - Completely unrelated or unclear requests
-                
-                Examples:
-                - "I want to transfer with a password" -> "generate"
-                - "Create a contract for secure transfers" -> "generate"
-                - "I need funds to be PIN protected" -> "generate"
-                - "What's the weather?" -> "invalid"
-                
-                Respond ONLY with one of these words.`
+                content: intentClassificationPrompt
             },
             {
                 role: 'user',

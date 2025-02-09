@@ -13,6 +13,7 @@ const abi = [
 ];
 
 const contractAddress = '0x610c598A1B4BF710a10934EA47E4992a9897fad1';
+const FLOW_CHAIN_ID = '0x221'; // Flow testnet chain ID
 
 export default function OnChainProof({ messages, signer, onTransactionComplete }) {
     const [isLoading, setIsLoading] = useState(false);
@@ -122,6 +123,31 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
             const responseReceipt = await responseTx.wait();
             console.log('Response receipt:', responseReceipt);
 
+            // After successful proof generation, switch back to Flow network
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: FLOW_CHAIN_ID }],
+                });
+            } catch (switchError) {
+                if (switchError.code === 4902) {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: FLOW_CHAIN_ID,
+                            chainName: 'EVM on Flow (testnet)',
+                            nativeCurrency: {
+                                name: 'Flow Token',
+                                symbol: 'FLOW',
+                                decimals: 18
+                            },
+                            rpcUrls: ['https://testnet.evm.nodes.onflow.org'],
+                            blockExplorerUrls: ['https://evm-testnet.flowscan.io']
+                        }]
+                    });
+                }
+            }
+
             // Call the callback with transaction data
             if (onTransactionComplete) {
                 onTransactionComplete({
@@ -133,6 +159,15 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
         } catch (error) {
             console.error('Error:', error);
             setError(error.message);
+            // Try to switch back to Flow network even if there's an error
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: FLOW_CHAIN_ID }],
+                });
+            } catch (switchError) {
+                console.error('Failed to switch back to Flow network:', switchError);
+            }
         } finally {
             setIsLoading(false);
         }
