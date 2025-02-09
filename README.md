@@ -10,7 +10,7 @@ One of our friends needed funds to stake in an ETHGlobal agentic hackathon. We s
 
 We thought:
 
-> *“What if we could tell an AI, in plain language, exactly how we want our funds handled—like ‘Send 0.2 ETH to Alice, but only for staking in ETHGlobal; otherwise, return it’ and have the wallet automatically enforce these conditions?”*
+> *“What if we could tell an AI, in plain language, exactly how we want our funds handled, like ‘Send 0.2 ETH to Alice, but only for staking in ETHGlobal; otherwise, return it’ and have the wallet automatically enforce these conditions?”*
 
 That sparked the idea of a **Customizable Agentic Smart Wallet**, you simply describe the rules (time locks, passwords, usage restrictions, or refunds if conditions aren’t met), and the wallet takes care of the rest. No manual coding. No guesswork. The only limitation is your imagination.
 
@@ -27,3 +27,5 @@ Traditional wallets (EOAs) and payment flows handle only **basic transfers**, la
 Essentially, when using MetaMask to send funds, you can’t impose custom requirements. Users who want these features end up writing their own code, relying on complex escrow services, or risking misuse of funds. Meanwhile, many AI-based wallet solutions focus on **standard transfers** only—they don’t allow you to truly customize how (or why) funds move.
 
 **Our AI Smart Wallet changes that**: just **tell** the AI your desired conditions, and it will **enforce** them automatically—no advanced coding required.
+
+
