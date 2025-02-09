@@ -1,7 +1,7 @@
 export const getAIConfig = (selectedModel) => {
     const configs = {
         openai: {
-            model: "gpt-4o-mini",
+            model: "gpt-4o",
             apiKey: process.env.OPENAI_API_KEY,
             baseURL: "https://api.openai.com/v1",
         },
