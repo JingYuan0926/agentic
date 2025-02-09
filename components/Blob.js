@@ -4,7 +4,7 @@ import fragmentShader from "./fragmentShader";
 import { useFrame } from "@react-three/fiber";
 import { MathUtils } from "three";
 
-const Blob = ({ shape = 'sphere', isActive = false }) => {
+const Blob = ({ shape = 'sphere', isActive = false, scale = 1.2 }) => {
   const mesh = useRef();
   const uniforms = useMemo(() => {
     return {
@@ -27,8 +27,10 @@ const Blob = ({ shape = 'sphere', isActive = false }) => {
   useFrame((state) => {
     const { clock } = state;
     if (mesh.current) {
+      // Use original animation speed
       mesh.current.material.uniforms.u_time.value = 0.4 * clock.getElapsedTime();
 
+      // Intensity animation for active state
       const targetIntensity = isActive ? 1.0 : 0.3;
       mesh.current.material.uniforms.u_intensity.value = MathUtils.lerp(
         mesh.current.material.uniforms.u_intensity.value,
@@ -56,7 +58,7 @@ const Blob = ({ shape = 'sphere', isActive = false }) => {
   return (
     <mesh
       ref={mesh}
-      scale={0.8}
+      scale={scale}
       position={[0, 0, 0]}
     >
       {getGeometry()}

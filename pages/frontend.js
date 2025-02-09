@@ -1,3 +1,4 @@
+'use client'
 import React from 'react';
 import AvatarGrid from '../components/AvatarGrid';
 import ChatInterface from '../components/ChatInterface';
