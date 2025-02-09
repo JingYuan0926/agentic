@@ -57,3 +57,44 @@ canvas {
   50%{background-position:100% 50%}
   100%{background-position:0% 50%}
 }
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#__next {
+  height: 100%;
+}
+
+/* Add these styles to your globals.css */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(147, 197, 253, 0.5);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(147, 197, 253, 0.8);
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
