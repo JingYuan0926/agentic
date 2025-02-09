@@ -647,7 +647,7 @@ function ChatComponent() {
                                 </Link>, 
                                 'Codey'
                             );
-                            addMessage('system', 'proof-generator', 'System');
+                            addMessage('system', 'Do you want to generate a proof of execution on chain?', 'Codey');
                         } else {
                             addMessage('assistant', `Verification note: ${verifyData.message}`, 'Codey');
                         }
@@ -1052,123 +1052,60 @@ function ChatComponent() {
                     </div>
 
                     {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto flex flex-col p-6">
+                    <div className="flex-1 overflow-y-auto p-6">
                         {messages.map((message, index) => (
                             <div
                                 key={index}
-                                className={`transition-all duration-200 ease-in-out ${
-                                    message.role === 'user' ? 'ml-auto max-w-[75%]' : 'mr-auto max-w-[75%] w-full'
+                                className={`flex ${
+                                    message.role === 'user' ? 'justify-end mb-4' : 'mb-4'
                                 }`}
                             >
-                                {message.content === 'proof-generator' ? (
-                                    <div className="flex items-start gap-3">
-                                        <div className="flex-shrink-0 text-center">
-                                            <img 
-                                                src={agentAvatars.system}
-                                                alt="System"
-                                                className="w-8 h-8 rounded-full border-2 border-black"
-                                            />
-                                            <div className="text-sm font-medium text-gray-600 mt-1">
-                                                System
-                                            </div>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="bg-gray-100 rounded-lg p-3">
-                                                <OnChainProof 
-                                                    messages={messages.filter(m => m.content !== 'proof-generator')} 
-                                                    signer={signer}
-                                                    onTransactionComplete={handleTransactionComplete}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        {message.role === 'user' ? (
-                                            <div className="bg-blue-500 text-white rounded-lg p-3">
+                                <div className={`${
+                                    message.role === 'user' ? 'ml-auto' : 'mr-auto'
+                                } max-w-[80%]`}>
+                                    {message.role === 'user' ? (
+                                        <div className="bg-blue-500 text-white rounded-lg p-3">
+                                            <div className="break-words">
                                                 {message.content}
                                             </div>
-                                        ) : (
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex-shrink-0 text-center">
-                                                    <img 
-                                                        src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
-                                                        alt={message.agent || 'Finn'}
-                                                        className="w-8 h-8 rounded-full"
-                                                    />
-                                                    <div className="text-sm font-medium text-gray-600 mt-1">
-                                                        {message.agent || 'Finn'}
-                                                    </div>
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="bg-gray-100 rounded-lg p-3">
-                                                        <div className="break-words">
-                                                            {typeof message.content === 'string' ? 
-                                                                message.content.replace(/\.\.\./g, '…')
-                                                                .split(/(?<=[.!?])\s+/)
-                                                                .filter(Boolean)
-                                                                .join(' ')
-                                                                : message.content
-                                                            }
-                                                        </div>
-                                                    </div>
-                                                    {message.proof && (
-                                                        <div className="mt-1">
-                                                            <button
-                                                                onClick={async () => {
-                                                                    // Set loading state for this specific message
-                                                                    setProofLoadingStates(prev => ({ ...prev, [message.timestamp]: true }));
-                                                                    try {
-                                                                        const proofComponent = (
-                                                                            <OnChainProof 
-                                                                                messages={messages} 
-                                                                                signer={signer}
-                                                                                isLoading={proofLoadingStates[message.timestamp]}
-                                                                                onGenerateProof={() => handleGenerateProof(message.timestamp)}
-                                                                                onTransactionComplete={handleTransactionComplete}
-                                                                            />
-                                                                        );
-                                                                        // Call the proof generation
-                                                                        await proofComponent.props.onClick?.();
-                                                                    } catch (error) {
-                                                                        console.error('Proof generation error:', error);
-                                                                        setProofLoadingStates(prev => ({ ...prev, [message.timestamp]: false }));
-                                                                    }
-                                                                }}
-                                                                disabled={proofLoadingStates[message.timestamp]}
-                                                                className="text-blue-500 hover:text-blue-600 text-sm flex items-center gap-2"
-                                                            >
-                                                                {proofLoadingStates[message.timestamp] ? (
-                                                                    <>
-                                                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                                                            <circle 
-                                                                                className="opacity-25" 
-                                                                                cx="12" 
-                                                                                cy="12" 
-                                                                                r="10" 
-                                                                                stroke="currentColor" 
-                                                                                strokeWidth="4" 
-                                                                                fill="none" 
-                                                                            />
-                                                                            <path 
-                                                                                className="opacity-75" 
-                                                                                fill="currentColor" 
-                                                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" 
-                                                                            />
-                                                                        </svg>
-                                                                        <span>Generating proof...</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <span>(proof on chain)</span>
-                                                                )}
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex-shrink-0 text-center">
+                                                <img 
+                                                    src={agentAvatars[message.agent?.toLowerCase()] || agentAvatars.finn}
+                                                    alt={message.agent || 'Finn'}
+                                                    className="w-8 h-8 rounded-full"
+                                                />
+                                                <div className="text-sm font-medium text-gray-600 mt-1">
+                                                    {message.agent || 'Finn'}
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="bg-gray-100 rounded-lg p-3">
+                                                    <div className="break-words">
+                                                        {typeof message.content === 'string' ? 
+                                                            message.content.replace(/\.\.\./g, '…')
+                                                            .split(/(?<=[.!?])\s+/)
+                                                            .filter(Boolean)
+                                                            .join(' ')
+                                                            : message.content
+                                                        }
+                                                    </div>
+                                                </div>
+                                                {message.content === 'proof-generator' && (
+                                                    <div className="mt-2">
+                                                        <OnChainProof 
+                                                            messages={messages.filter(m => m.content !== 'proof-generator')} 
+                                                            signer={signer}
+                                                            onTransactionComplete={handleTransactionComplete}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
