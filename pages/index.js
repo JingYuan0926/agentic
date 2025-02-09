@@ -7,7 +7,6 @@ import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
 import OnChainProof from '../components/OnChainProof';
-import { useNetworkSwitch } from '../hooks/useNetworkSwitch';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -59,8 +58,40 @@ function ChatComponent() {
     // Add new state for transaction popup
     const [txPopup, setTxPopup] = useState(null);
 
-    // Add network switch state
-    const { switchToFlow } = useNetworkSwitch();
+    // Add this effect at the top level of your component
+    useEffect(() => {
+        const checkAndSwitchNetwork = async () => {
+            if (window.ethereum && signer) {
+                const network = await window.ethereum.request({ method: 'eth_chainId' });
+                if (network !== '0x221') { // If not on Flow
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x221' }],
+                        });
+                    } catch (switchError) {
+                        if (switchError.code === 4902) {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{
+                                    chainId: '0x221',
+                                    chainName: 'EVM on Flow (testnet)',
+                                    nativeCurrency: {
+                                        name: 'Flow Token',
+                                        symbol: 'FLOW',
+                                        decimals: 18
+                                    },
+                                    rpcUrls: ['https://testnet.evm.nodes.onflow.org'],
+                                    blockExplorerUrls: ['https://evm-testnet.flowscan.io']
+                                }]
+                            });
+                        }
+                    }
+                }
+            }
+        };
+        checkAndSwitchNetwork();
+    }, [signer]);
 
     // Handle client-side initialization
     useEffect(() => {
@@ -669,20 +700,13 @@ function ChatComponent() {
         }
     };
 
-    // Update executeContractFunction to match your previous working version
+    // Keep your original executeContractFunction implementation
     const executeContractFunction = async (functionInfo, params) => {
         try {
             if (!signer || !connectedContract) {
                 throw new Error('Contract or signer not initialized');
             }
 
-            console.log('Function execution details:', {
-                functionInfo,
-                params,
-                contractAddress: connectedContract
-            });
-
-            // Create minimal ABI array with just the function we need
             const minimalABI = [{
                 name: functionInfo.name,
                 type: 'function',
@@ -693,33 +717,39 @@ function ChatComponent() {
 
             const contract = new ethers.Contract(connectedContract, minimalABI, signer);
 
-            // Handle payable functions
-            let txOptions = {};
-            let processedParams = [];
-
+            // For payable functions
             if (functionInfo.stateMutability === 'payable') {
-                const amount = params.amount || Object.values(params)[0];
-                txOptions = { value: ethers.parseEther(amount.toString()) };
-                console.log('Payable transaction:', { amount, wei: txOptions.value.toString() });
+                // Extract amount - params is now directly the amount string
+                const amount = params;
+                console.log('Deposit amount:', amount); // Debug log
+                
+                const tx = await contract[functionInfo.name]({
+                    value: ethers.parseEther(amount),
+                    gasLimit: 3000000
+                });
+                
+                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+                const receipt = await tx.wait();
+                return {
+                    success: true,
+                    message: `Transaction successful! Hash: ${receipt.hash}`,
+                    hash: receipt.hash
+                };
             } else {
-                processedParams = Object.values(params);
+                // For non-payable functions
+                const processedParams = Array.isArray(params) ? params : [params];
+                const tx = await contract[functionInfo.name](...processedParams, {
+                    gasLimit: 3000000
+                });
+                
+                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+                const receipt = await tx.wait();
+                return {
+                    success: true,
+                    message: `Transaction successful! Hash: ${receipt.hash}`,
+                    hash: receipt.hash
+                };
             }
-
-            // Execute the function
-            const tx = await contract[functionInfo.name](
-                ...processedParams,
-                txOptions
-            );
-
-            addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
-            
-            const receipt = await tx.wait();
-            
-            return {
-                success: true,
-                message: `Transaction successful! Hash: ${receipt.hash}`,
-                hash: receipt.hash
-            };
 
         } catch (error) {
             console.error('Contract execution error:', error);
@@ -781,19 +811,6 @@ function ChatComponent() {
             responseHash: txData.responseHash
         });
     };
-
-    // Add new useEffect for network switching
-    useEffect(() => {
-        const checkAndSwitchNetwork = async () => {
-            if (window.ethereum && signer) {
-                const network = await window.ethereum.request({ method: 'eth_chainId' });
-                if (network !== '0xc45') { // If not on Flow
-                    await switchToFlow().catch(console.error);
-                }
-            }
-        };
-        checkAndSwitchNetwork();
-    }, [signer]);
 
     return (
         <div className="flex flex-col h-screen">

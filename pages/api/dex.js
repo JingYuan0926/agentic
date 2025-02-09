@@ -204,26 +204,38 @@ export default async function handler(req, res) {
         if (!functionInfo || !userQuery) {
             return res.status(400).json({
                 success: false,
-                message: "Missing required fields",
-                needsMoreInfo: true,
-                missingFields: {
-                    hasFunctionInfo: !functionInfo,
-                    hasUserQuery: !userQuery
-                }
+                message: "Missing required fields"
             });
         }
 
-        // Handle payable functions
+        // Handle payable functions using LLM
         if (functionInfo.stateMutability === 'payable') {
-            const { params, teamUpdate } = await extractParamsFromQuery(userQuery, {
-                ...functionInfo,
-                inputs: [{ name: 'amount', type: 'uint256' }]
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    {
+                        role: "system",
+                        content: `Extract only the numeric amount from the user's deposit request. 
+                        Return ONLY a number without any text or symbols.
+                        Examples:
+                        - "deposit 100 flows" -> "100"
+                        - "I want to deposit 50.5 flow" -> "50.5"
+                        - "put in 25 flows please" -> "25"`
+                    },
+                    {
+                        role: "user",
+                        content: userQuery
+                    }
+                ]
             });
 
-            if (!params || !params[0]) {
+            const amount = response.choices[0].message.content.trim();
+            
+            // Validate the amount is a valid number
+            if (!amount || isNaN(amount)) {
                 return res.status(200).json({
                     success: false,
-                    message: "Please specify the amount to deposit (e.g., 'deposit 100 flows')",
+                    message: "Please specify a valid amount to deposit (e.g., 'deposit 100 flows')",
                     needsMoreInfo: true,
                     missingInfo: ['amount']
                 });
@@ -231,9 +243,9 @@ export default async function handler(req, res) {
 
             return res.status(200).json({
                 success: true,
-                params: { value: params[0] },
-                message: `Ready to deposit ${ethers.formatEther(params[0])} FLOW`,
-                teamUpdate
+                params: amount, // Just return the amount directly
+                message: `Ready to deposit ${amount} FLOW`,
+                teamUpdates: [`Dex: Extracted deposit amount of ${amount} FLOW`]
             });
         }
 
