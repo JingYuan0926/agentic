@@ -105,6 +105,9 @@ Though the user experiences a **single AI-driven interface**, there are actually
 
 ## Architecture & Tech Stack
 
+
+
+
 ---
 
 ## How We Use Flow Blockchain
@@ -199,8 +202,6 @@ Additionally, we integrated **Hyperbolic API** (built on EigenLayer) as our **LL
 These improvements will **eliminate the need** for a separate wallet interface (like MetaMask) and **unlock a fully customizable**, AI-driven on-chain ecosystem. 
 
 ---
-
-## Team
 
 ## Team
 
