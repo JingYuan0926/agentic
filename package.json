@@ -26,6 +26,7 @@
     "fs": "^0.0.1-security",
     "next": "^15.1.6",
     "nillion-sv-wrappers": "^1.0.9",
+    "node-fetch": "^3.3.2",
     "ollama": "^0.5.12",
     "openai": "^4.82.0",
     "react": "^18.2.0",
