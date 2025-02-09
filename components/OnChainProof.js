@@ -91,10 +91,10 @@ export default function OnChainProof({ messages, signer, onTransactionComplete }
             console.log('Task Index:', taskIndex);
 
             // Initialize operator wallet
-            if (!process.env.NEXT_PUBLIC_OPERATOR_PRIVATE_KEY) {
+            if (!process.env.OPERATOR_PRIVATE_KEY) {
                 throw new Error('Operator private key not configured');
             }
-            const operatorWallet = new ethers.Wallet(process.env.NEXT_PUBLIC_OPERATOR_PRIVATE_KEY, provider);
+            const operatorWallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY, provider);
             
             // Create operator signature
             const messageHash = ethers.keccak256(

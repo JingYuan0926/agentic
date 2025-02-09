@@ -1146,28 +1146,34 @@ function ChatComponent() {
                         ))}
                     </div>
                     
-                    {/* Chat Input - Keep existing code */}
+                    {/* Chat Input Section */}
                     <div className="p-4 border-t">
                         <div className="flex items-end gap-2">
                             <Textarea
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder={isConnected ? "Type your message here..." : "Connect Wallet to Start Using Us"}
+                                placeholder={
+                                    !isConnected 
+                                        ? "Connect Wallet to Start Using Us"
+                                        : isLoading
+                                            ? "AI is responding..."
+                                            : "Type your message here..."
+                                }
                                 minRows={1}
                                 maxRows={4}
                                 className="flex-1"
                                 onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                                disabled={!isConnected}
+                                disabled={!isConnected || isLoading}
                             />
                             <button
                                 onClick={handleSendMessage}
                                 disabled={isLoading || !input.trim() || !isConnected}
                                 className={`p-3 rounded-full relative ${
                                     !isConnected || !input.trim()
-                                        ? 'bg-gray-200 cursor-not-allowed' // Disabled state
+                                        ? 'bg-gray-200 cursor-not-allowed'
                                         : isLoading
-                                            ? 'bg-blue-400 cursor-wait' // Loading state
-                                            : 'bg-blue-500 hover:bg-blue-600' // Normal state
+                                            ? 'bg-blue-400 cursor-wait'
+                                            : 'bg-blue-500 hover:bg-blue-600'
                                 } text-white`}
                             >
                                 {isLoading ? (
