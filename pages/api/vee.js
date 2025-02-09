@@ -1,4 +1,5 @@
 import { createChatCompletion } from '../../utils/aiConfig';
+import OpenAI from 'openai';
 
 const veePersonality = {
     name: "Vee",

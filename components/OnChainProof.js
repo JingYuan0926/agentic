@@ -210,21 +210,14 @@ export default function OnChainProof({ messages, signer, onTransactionComplete, 
     };
 
     return (
-        <div className="mt-4">
-            <button
-                onClick={generateProof}
-                disabled={isLoading || !messages.length || !signer}
-                className={`px-4 py-2 rounded ${
-                    isLoading || !signer
-                        ? 'bg-gray-400'
-                        : 'bg-green-500 hover:bg-green-600'
-                } text-white transition-colors`}
-            >
-                {!signer ? 'Connect Wallet First' : isLoading ? 'Generating...' : 'Generate On-Chain Proof'}
-            </button>
-            {error && (
-                <p className="text-red-500 text-sm mt-2">{error}</p>
-            )}
-        </div>
+        <button
+            onClick={generateProof}
+            disabled={isLoading || !messages.length || !signer}
+            className={`text-green-500 hover:text-green-600 text-sm transition-colors ${
+                isLoading || !signer ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+        >
+            {!signer ? 'Connect Wallet First' : isLoading ? 'Generating...' : 'Proof on Chain'}
+        </button>
     );
 } 

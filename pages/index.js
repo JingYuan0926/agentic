@@ -3,10 +3,13 @@ import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3Modal, useWeb3ModalAccount, useWeb3ModalProvider } from '@web3modal/ethers/react';
 import dynamic from 'next/dynamic';
-import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
 import OnChainProof from '../components/OnChainProof';
+import { Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/dropdown";
+import { Textarea } from "@heroui/input";
+import { FiMenu, FiSend } from 'react-icons/fi';
+import Header from '../components/Header';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -66,6 +69,9 @@ function ChatComponent() {
 
     // Add this with other state declarations at the top
     const [isGeneratingProof, setIsGeneratingProof] = useState(false);
+
+    // Add state for chat history drawer
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
     // Add this effect at the top level of your component
     useEffect(() => {
@@ -830,190 +836,171 @@ function ChatComponent() {
 
     return (
         <div className="flex flex-col h-screen">
-            <Header />
+            {/* Header only on right side */}
+            <div className="flex">
+                <div className="w-1/2"></div>
+                <div className="w-1/2">
+                    <Header />
+                </div>
+            </div>
+            
             <div className="flex flex-1 overflow-hidden">
-                {/* Chat History Sidebar */}
-                <div className="w-64 bg-white shadow-md overflow-y-auto">
-                    <div className="p-4">
-                        <button
-                            onClick={startNewChat}
-                            className="w-full mb-4 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
-                        >
-                            New Chat
-                        </button>
-                        {/* Current Chat */}
-                        {messages.length > 0 && (
-                            <div className="cursor-pointer bg-blue-100 p-3 rounded mb-2">
-                                <div className="text-sm truncate">
-                                    {messages[0].content.substring(0, 30)}...
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                    {new Date(messages[0].timestamp).toLocaleDateString()}
-                                </div>
-                            </div>
-                        )}
-                        {/* Chat History */}
-                        {chatHistory.map(chat => (
-                            chat.id !== currentChatId && chat.messages?.length > 0 && (
-                                <div 
-                                    key={chat.id}
-                                    className="relative group cursor-pointer hover:bg-gray-100 p-3 rounded mb-2"
-                                >
-                                    <div onClick={() => selectChat(chat.id)}>
-                                        <div className="text-sm truncate">
-                                            {chat.messages[0]?.content 
-                                                ? chat.messages[0].content.substring(0, 30) + '...'
-                                                : 'Empty message'}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                            {new Date(chat.messages[0]?.timestamp || Date.now()).toLocaleDateString()}
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Delete button */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteChat(chat.id);
-                                        }}
-                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100
-                                                 text-red-500 hover:text-red-700 transition-opacity"
-                                        title="Delete chat"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            )
-                        ))}
-                    </div>
+                {/* Left side - Chat History Drawer */}
+                <div className="w-1/2 border-r border-gray-200">
+                    {/* Empty for now */}
                 </div>
 
-                {/* Main Chat Area */}
-                <div className="flex-1 flex flex-col">
-                    {/* Contract Connection Status */}
-                    <div className="p-4 border-b flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div 
-                                className={`w-3 h-3 rounded-full ${
-                                    isContractConnected 
-                                        ? 'bg-green-500' 
-                                        : 'bg-amber-500'
-                                }`}
-                                title={isContractConnected 
-                                    ? `Connected to ${connectedContract}` 
-                                    : 'No contract connected'
-                                }
-                            />
-                            <span className="text-sm text-gray-600">
-                                {isContractConnected ? `Connected to ${connectedContract}` : 'No contract connected'}
-                            </span>
-                        </div>
-                        {isContractConnected && (
-                            <button
-                                onClick={handleDisconnectContract}
-                                className="text-xs px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                            >
-                                Disconnect
-                            </button>
-                        )}
-                    </div>
-
-                    {/* AI Model Selector */}
-                    <div className="p-4 border-b">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <label className="text-sm font-medium text-gray-700">AI Model:</label>
-                                <select
-                                    value={selectedModel}
-                                    onChange={(e) => setSelectedModel(e.target.value)}
-                                    className="border rounded px-3 py-1 text-sm"
-                                >
-                                    <option value="openai">OpenAI GPT-4o</option>
-                                    <option value="hyperbolic">Llama 3.3 70B</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Messages Area */}
-                    <div className="flex-1 overflow-y-auto p-4">
-                        {error && (
-                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                {error}
-                            </div>
-                        )}
-
-                        {isClient && messages.length > 0 && (
-                            <div className="space-y-4">
-                                {messages.map((message, index) => (
-                                    <div key={index} className="relative group">
-                                        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[80%] p-3 rounded-lg ${
-                                                message.role === 'user' 
-                                                    ? 'bg-blue-500 text-white' 
-                                                    : 'bg-gray-200'
-                                            }`}>
-                                                {message.content}
-                                            </div>
-                                        </div>
-                                        
-                                        <button
-                                            onClick={() => handleDeleteMessage(message.timestamp)}
-                                            className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100
-                                                     text-red-500 hover:text-red-700 transition-opacity"
+                {/* Right side - Chat Interface */}
+                <div className="w-1/2 flex flex-col">
+                    {/* Top Bar */}
+                    <div className="flex items-center justify-between p-4 border-b">
+                        <div className="flex items-center gap-4">
+                            {/* Replace the drawer button with dropdown */}
+                            <Dropdown>
+                                <DropdownTrigger>
+                                    <button 
+                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                    >
+                                        <FiMenu size={24} />
+                                    </button>
+                                </DropdownTrigger>
+                                <DropdownMenu>
+                                    {chatHistory.map((chat) => (
+                                        <DropdownItem 
+                                            key={chat.id}
+                                            onClick={() => selectChat(chat.id)}
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-medium truncate">
+                                                    {chat.messages[0]?.content || 'New Chat'}
+                                                </span>
+                                                <span className="text-xs text-gray-500">
+                                                    {new Date(chat.timestamp).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                        </DropdownItem>
+                                    ))}
+                                </DropdownMenu>
+                            </Dropdown>
+                            
+                            {/* Connection Status */}
+                            <Dropdown>
+                                <DropdownTrigger>
+                                    <button className="flex items-center gap-2 px-3 py-1.5 rounded-full border hover:bg-gray-50">
+                                        <div className={`w-2 h-2 rounded-full ${isContractConnected ? 'bg-green-500' : 'bg-amber-500'}`} />
+                                        <span className="text-sm">
+                                            {isContractConnected ? 'Connected' : 'No contract connected'}
+                                        </span>
+                                    </button>
+                                </DropdownTrigger>
+                                {isContractConnected && (
+                                    <DropdownMenu>
+                                        <DropdownItem>
+                                            <div className="flex flex-col gap-1 py-1">
+                                                <span className="text-sm font-medium">Contract Address:</span>
+                                                <span className="text-xs text-gray-500 break-all">
+                                                    {connectedContract}
+                                                </span>
+                                            </div>
+                                        </DropdownItem>
+                                        <DropdownItem>
+                                            <button 
+                                                onClick={handleDisconnectContract}
+                                                className="w-full text-left text-sm text-red-500 hover:text-red-600"
+                                            >
+                                                Disconnect Contract
+                                            </button>
+                                        </DropdownItem>
+                                    </DropdownMenu>
+                                )}
+                            </Dropdown>
+                        </div>
 
-                        {isLoading && (
-                            <div className="text-center py-4 text-gray-600">
-                                Processing...
-                            </div>
-                        )}
+                        {/* Model Selection & OnChain Proof */}
+                        <div className="flex items-center gap-4">
+                            {/* Model Selection Dropdown */}
+                            <Dropdown>
+                                <DropdownTrigger>
+                                    <button className="px-4 py-2 border rounded-md">
+                                        {selectedModel === 'openai' ? 'OpenAI GPT-4o' : 'Llama 3.3 70B'}
+                                    </button>
+                                </DropdownTrigger>
+                                <DropdownMenu aria-label="Model Selection">
+                                    <DropdownItem key="openai" onClick={() => setSelectedModel('openai')}>
+                                        OpenAI GPT-4o
+                                    </DropdownItem>
+                                    <DropdownItem key="hyperbolic" onClick={() => setSelectedModel('hyperbolic')}>
+                                        Llama 3.3 70B
+                                    </DropdownItem>
+                                </DropdownMenu>
+                            </Dropdown>
+
+                            {/* OnChainProof is now rendered within the message component, not here */}
+                        </div>
                     </div>
 
-                    {/* Add this before the Input Area */}
-                    <OnChainProof 
-                        messages={messages} 
-                        signer={signer} 
-                        onTransactionComplete={handleTransactionComplete}
-                        setIsGeneratingProof={setIsGeneratingProof}
-                    />
-
-                    {/* Input Area */}
+                    {/* Chat Messages */}
+                    <div className="flex-1 overflow-y-auto flex flex-col">
+                        {messages.map((message, index) => (
+                            <div
+                                key={index}
+                                className={`mb-4 transition-all duration-200 ease-in-out ${
+                                    message.role === 'user' ? 'ml-auto' : 'mr-auto'
+                                }`}
+                            >
+                                {message.role === 'user' ? (
+                                    <div className="bg-blue-500 text-white rounded-lg p-3 max-w-[80%]">
+                                        {message.content}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-start gap-2 max-w-[80%]">
+                                        <img 
+                                            src={`/ai-avatars/${message.role}.png`}
+                                            alt={message.role}
+                                            className="w-8 h-8 rounded-full"
+                                        />
+                                        <div className="bg-gray-100 rounded-lg p-3">
+                                            <div className="font-medium text-sm text-gray-600 mb-1">
+                                                {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+                                            </div>
+                                            <div>{message.content}</div>
+                                        </div>
+                                    </div>
+                                )}
+                                {message.proof && (
+                                    <a 
+                                        href={message.proof}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-500 hover:text-blue-600 text-sm ml-2"
+                                    >
+                                        (proof on chain)
+                                    </a>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    
+                    {/* Chat Input - Keep existing code */}
                     <div className="p-4 border-t">
-                        {!isConnected ? (
-                            <div className="text-center py-4 text-gray-600">
-                                Please connect your wallet to chat
-                            </div>
-                        ) : (
-                            <div className="flex gap-2">
-                                <textarea
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                                    className="flex-1 p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Type your message here"
-                                    rows="3"
-                                    disabled={isLoading}
-                                />
-                                <button
-                                    onClick={handleSendMessage}
-                                    disabled={isLoading || !input.trim()}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-blue-300"
-                                >
-                                    Send
-                                </button>
-                            </div>
-                        )}
+                        <div className="flex items-end gap-2">
+                            <Textarea
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                placeholder="Type your message here..."
+                                minRows={1}
+                                maxRows={4}
+                                className="flex-1"
+                                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                            />
+                            <button
+                                onClick={handleSendMessage}
+                                disabled={isLoading || !input.trim()}
+                                className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 disabled:bg-blue-300"
+                            >
+                                <FiSend size={20} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
