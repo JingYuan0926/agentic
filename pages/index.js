@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import Header from '../components/Header';
 import { NilQLWrapper } from 'nillion-sv-wrappers';
 import { BrowserProvider, Contract } from 'ethers';
+import OnChainProof from '../components/OnChainProof';
 
 // Create SSR-safe component
 const Chat = dynamic(() => Promise.resolve(ChatComponent), {
@@ -53,6 +54,9 @@ function ChatComponent() {
 
     // Add refresh trigger for chat history
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    // Add new state for transaction popup
+    const [txPopup, setTxPopup] = useState(null);
 
     // Handle client-side initialization
     useEffect(() => {
@@ -767,6 +771,13 @@ function ChatComponent() {
         }
     }, [isConnected]);
 
+    const handleTransactionComplete = (txData) => {
+        setTxPopup({
+            createTaskHash: txData.createTaskHash,
+            responseHash: txData.responseHash
+        });
+    };
+
     return (
         <div className="flex flex-col h-screen">
             <Header />
@@ -902,6 +913,13 @@ function ChatComponent() {
                         )}
                     </div>
 
+                    {/* Add this before the Input Area */}
+                    <OnChainProof 
+                        messages={messages} 
+                        signer={signer} 
+                        onTransactionComplete={handleTransactionComplete}
+                    />
+
                     {/* Input Area */}
                     <div className="p-4 border-t">
                         {!isConnected ? (
@@ -931,6 +949,35 @@ function ChatComponent() {
                     </div>
                 </div>
             </div>
+
+            {/* Transaction Popup */}
+            {txPopup && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg p-6 max-w-lg w-full">
+                        <h3 className="text-lg font-bold mb-4">Transactions Complete!</h3>
+                        <div className="space-y-2">
+                            <p>Task Creation: <a 
+                                href={`https://holesky.etherscan.io/tx/${txPopup.createTaskHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 underline"
+                            >{txPopup.createTaskHash}</a></p>
+                            <p>Operator Response: <a 
+                                href={`https://holesky.etherscan.io/tx/${txPopup.responseHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 underline"
+                            >{txPopup.responseHash}</a></p>
+                        </div>
+                        <button 
+                            onClick={() => setTxPopup(null)}
+                            className="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
