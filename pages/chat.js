@@ -1134,7 +1134,7 @@ function ChatComponent() {
                             <Textarea
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder={isConnected ? "Type your message here..." : "Connect wallet to start chatting"}
+                                placeholder={isConnected ? "Type your message here..." : "Connect Wallet to Start Using Us"}
                                 minRows={1}
                                 maxRows={4}
                                 className="flex-1"
