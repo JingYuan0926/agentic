@@ -47,40 +47,52 @@ const getContractABI = async (contractAddress) => {
 // Update parseParameter to be more dynamic
 const parseParameter = (value, type, paramName) => {
     try {
-        if (!value) {
-            throw new Error(`Missing value for ${type} parameter`);
+        if (value === null || value === undefined) {
+            throw new Error(`Missing value for ${paramName} (${type})`);
         }
 
-        switch (type) {
+        switch (type.toLowerCase()) {
             case 'uint256':
-                if (value.toString().toLowerCase().includes('flow')) {
-                    const amount = value.toString().replace(/\s*flows?\s*/i, '');
+            case 'uint':
+                // Handle FLOW amounts
+                if (typeof value === 'string' && value.toLowerCase().includes('flow')) {
+                    const amount = value.replace(/\s*flows?\s*/i, '');
                     return ethers.parseEther(amount).toString();
                 }
+                // Handle regular numbers
                 return ethers.parseUnits(value.toString(), 18).toString();
+                
             case 'string':
-                // If it's a password parameter, always return "0000"
-                if (paramName.toLowerCase().includes('password')) {
-                    return "0000";
-                }
                 return value.toString();
+                
             case 'bytes32':
-                // For password parameters, always hash "0000"
-                if (paramName.toLowerCase().includes('password')) {
-                    return ethers.keccak256(ethers.toUtf8Bytes("0000"));
-                }
                 if (typeof value === 'string') {
-                    if (value.startsWith('0x') && value.length === 66) {
-                        return value;
-                    }
-                    return ethers.keccak256(ethers.toUtf8Bytes(value));
+                    return value.startsWith('0x') && value.length === 66 
+                        ? value 
+                        : ethers.keccak256(ethers.toUtf8Bytes(value));
                 }
                 throw new Error('Invalid bytes32 value');
+                
+            case 'address':
+                if (typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value)) {
+                    return value;
+                }
+                throw new Error('Invalid address format');
+                
+            case 'bool':
+                if (typeof value === 'boolean') return value;
+                if (typeof value === 'string') {
+                    const lowered = value.toLowerCase();
+                    if (['true', '1', 'yes'].includes(lowered)) return true;
+                    if (['false', '0', 'no'].includes(lowered)) return false;
+                }
+                throw new Error('Invalid boolean value');
+                
             default:
                 return value;
         }
     } catch (error) {
-        throw new Error(`Error parsing ${type} parameter: ${error.message}`);
+        throw new Error(`Error parsing ${paramName} (${type}): ${error.message}`);
     }
 };
 

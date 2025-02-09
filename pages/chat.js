@@ -672,6 +672,20 @@ function ChatComponent() {
                                     'Codey'
                                 );
 
+                                // Add contract explanation after deployment
+                                const explainResponse = await fetch('/api/explain', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        contractAddress: deployedAddress,
+                                    })
+                                });
+
+                                const explainData = await explainResponse.json();
+                                if (explainData.success) {
+                                    addMessage('assistant', explainData.explanation, 'Vee');
+                                }
+
                                 // Add proof generation prompt
                                 addMessage('assistant', 'Do you want to generate a proof of execution on chain?', 'Codey');
                             }
@@ -810,49 +824,40 @@ function ChatComponent() {
                 throw new Error('Contract or signer not initialized');
             }
 
+            // Create minimal ABI with proper structure
             const minimalABI = [{
                 name: functionInfo.name,
                 type: 'function',
-                inputs: functionInfo.inputs,
-                outputs: functionInfo.outputs,
+                inputs: functionInfo.inputs || [],
+                outputs: functionInfo.outputs || [],
                 stateMutability: functionInfo.stateMutability
             }];
 
-            const contract = new ethers.Contract(connectedContract, minimalABI, signer);
+            let tx;
+            const contract = new Contract(connectedContract, minimalABI, signer);
 
             // For payable functions
             if (functionInfo.stateMutability === 'payable') {
-                // Extract amount - params is now directly the amount string
-                const amount = params;
-                console.log('Deposit amount:', amount); // Debug log
-                
-                const tx = await contract[functionInfo.name]({
+                const amount = params.toString();
+                tx = await contract[functionInfo.name]({
                     value: ethers.parseEther(amount),
-                    gasLimit: 3000000
+                    gasLimit: BigInt(3000000)
                 });
-                
-                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
-                const receipt = await tx.wait();
-                return {
-                    success: true,
-                    message: `Transaction successful! Hash: ${receipt.hash}`,
-                    hash: receipt.hash
-                };
             } else {
                 // For non-payable functions
-                const processedParams = Array.isArray(params) ? params : [params];
-                const tx = await contract[functionInfo.name](...processedParams, {
-                    gasLimit: 3000000
+                const functionParams = Array.isArray(params) ? params : [params];
+                tx = await contract[functionInfo.name](...functionParams, {
+                    gasLimit: BigInt(3000000)
                 });
-                
-                addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
-                const receipt = await tx.wait();
-                return {
-                    success: true,
-                    message: `Transaction successful! Hash: ${receipt.hash}`,
-                    hash: receipt.hash
-                };
             }
+
+            addMessage('assistant', 'Transaction submitted. Waiting for confirmation...', 'Dex');
+            const receipt = await tx.wait();
+            return {
+                success: true,
+                message: `Transaction successful! Hash: ${receipt.hash}`,
+                hash: receipt.hash
+            };
 
         } catch (error) {
             console.error('Contract execution error:', error);
