@@ -75,6 +75,9 @@ function ChatComponent() {
     // Add state for chat history drawer
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
+    // Add new state for active agent
+    const [activeAgent, setActiveAgent] = useState(null);
+
     // Add this effect at the top level of your component
     useEffect(() => {
         const checkAndSwitchNetwork = async () => {
@@ -308,7 +311,7 @@ function ChatComponent() {
 
             const messageData = {
                 role,
-                content: { $allot: encryptedContent }, // Store encrypted content
+                content: { $allot: encryptedContent },
                 agent,
                 timestamp,
                 chatId: currentChatId || timestamp.toString()
@@ -324,10 +327,8 @@ function ChatComponent() {
                 }),
             });
 
-            // Update error handling
             if (!response.ok) {
                 console.error('Store error:', response.status);
-                // Continue with local updates even if storage fails
             }
             
             // Update local state immediately
@@ -347,12 +348,30 @@ function ChatComponent() {
             }
 
             console.log('💾 Message stored successfully');
+
+            // Update active agent when AI responds
+            if (agent) {
+                const agentMap = {
+                    'Finn': 'finder',
+                    'Codey': 'creator',
+                    'Dex': 'developer',
+                    'Vee': 'verifier'
+                };
+                setActiveAgent(agentMap[agent]);
+                
+                // Wait for message to be processed before resetting agent
+                await new Promise(resolve => setTimeout(resolve, 100));
+                setActiveAgent(null);
+            }
+
             return messageData.chatId;
         } catch (error) {
             console.error('Message error:', error);
             // Still update local state even if there's an error
             const newMessage = { role, content, agent, timestamp: Date.now() };
             setMessages(prev => [...prev, newMessage]);
+            // Ensure agent is reset even on error
+            setActiveAgent(null);
             throw error;
         }
     };
@@ -859,7 +878,7 @@ function ChatComponent() {
             
             <div className="flex flex-1 overflow-hidden">
                 {/* Left side - Avatar Grid */}
-                <AvatarGrid />
+                <AvatarGrid activeAgent={activeAgent} />
 
                 {/* Right side - Chat Interface */}
                 <div className="w-1/2 flex flex-col">
