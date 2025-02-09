@@ -42,6 +42,9 @@ function ChatComponent() {
     const [isContractConnected, setIsContractConnected] = useState(false);
     const [connectedContract, setConnectedContract] = useState('');
 
+    // Add this with other state declarations at the top
+    const [contractBytecode, setContractBytecode] = useState(null);
+
     const { address, isConnected } = useWeb3ModalAccount();
     const { walletProvider } = useWeb3ModalProvider();
     const { open } = useWeb3Modal();
@@ -575,13 +578,16 @@ function ChatComponent() {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
+                                prompt: userMessage,
                                 message: userMessage,
                                 selectedModel
                             })
                         });
 
+                        // Use stream reading
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
+                        let contractData = null;
 
                         while (true) {
                             const { done, value } = await reader.read();
@@ -592,31 +598,86 @@ function ChatComponent() {
 
                             for (const line of lines) {
                                 if (line.trim() && line.startsWith('data: ')) {
-                                    try {
-                                        const eventData = JSON.parse(line.slice(6));
-                                        
-                                        // Add message for status updates
-                                        if (eventData.status) {
-                                            addMessage('assistant', eventData.status, 'Codey');
-                                        }
+                                    const eventData = JSON.parse(line.slice(6));
+                                    addMessage('assistant', eventData.status, 'Codey');
 
-                                        // Handle contract data
-                                        if (eventData.abi && eventData.bytecode) {
-                                            setContractABI(eventData.abi);
-                                            setContractBytecode(eventData.bytecode);
-                                        }
+                                    if (eventData.abi && eventData.bytecode) {
+                                        setContractABI(eventData.abi);
+                                        setContractBytecode(eventData.bytecode);
+                                        contractData = eventData;
+                                    }
 
-                                        if (eventData.error) {
-                                            throw new Error(eventData.status);
-                                        }
-                                    } catch (parseError) {
-                                        console.error('Error parsing event data:', parseError);
+                                    if (eventData.error) {
+                                        throw new Error(eventData.status);
                                     }
                                 }
                             }
                         }
+
+                        if (contractData) {
+                            // Deploy contract
+                            addMessage('assistant', 'Deploying contract...', 'Codey');
+                            const factory = new ethers.ContractFactory(
+                                contractData.abi,
+                                contractData.bytecode,
+                                signer
+                            );
+
+                            const contract = await factory.deploy({
+                                gasLimit: 3000000
+                            });
+
+                            addMessage('assistant', 'Waiting for deployment confirmation...', 'Codey');
+                            await contract.waitForDeployment();
+                            const deployedAddress = await contract.getAddress();
+
+                            // Wait for a few blocks
+                            const receipt = await contract.deploymentTransaction().wait(2);
+
+                            // Set contract as connected
+                            setConnectedContract(deployedAddress);
+                            setIsContractConnected(true);
+                            addTeamUpdate('System', `Connected to contract ${deployedAddress}`);
+
+                            // Wait before verification
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+
+                            // Verify contract
+                            const verifyResponse = await fetch('/api/verify', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    address: deployedAddress,
+                                    contractCode: contractData.contractCode,
+                                    selectedModel
+                                })
+                            });
+
+                            const verifyData = await verifyResponse.json();
+                            if (verifyData.success) {
+                                setDeployedAddress(deployedAddress);
+                                addMessage('assistant', 'Contract deployed!', 'Codey');
+                                
+                                // Add View on Explorer link
+                                addMessage('assistant', 
+                                    <Link 
+                                        href={verifyData.explorerUrl}
+                                        isExternal
+                                        showAnchorIcon
+                                        color="primary"
+                                        className="hover:opacity-70"
+                                    >
+                                        View on Explorer
+                                    </Link>, 
+                                    'Codey'
+                                );
+
+                                // Add proof generation prompt
+                                addMessage('assistant', 'Do you want to generate a proof of execution on chain?', 'Codey');
+                            }
+                        }
                     } catch (error) {
-                        console.error('Deployment error:', error);
+                        console.error('Contract deployment error:', error);
                         addMessage('system', `Error: ${error.message}`, 'System');
                     }
                 }
