@@ -938,6 +938,24 @@ function ChatComponent() {
         }
     };
 
+    // Modify the useEffect for handling initial message
+    useEffect(() => {
+        const handleInitialMessage = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialMessage = urlParams.get('message');
+            
+            if (initialMessage && isConnected) {
+                setInput(initialMessage);
+                // Clean up URL without refreshing page
+                window.history.replaceState({}, '', '/chat');
+            }
+        };
+
+        if (isConnected) {
+            handleInitialMessage();
+        }
+    }, [isConnected]); // Simplified dependencies
+
     return (
         <div className="flex flex-col h-screen">
             {/* Header spans full width */}
@@ -1051,8 +1069,8 @@ function ChatComponent() {
                             {/* Model Selection Dropdown */}
                             <Dropdown>
                                 <DropdownTrigger>
-                                    <button className="px-4 py-2 border rounded-md">
-                                        {selectedModel === 'openai' ? 'OpenAI GPT-4o' : 'Llama 3.3 70B'}
+                                    <button className="px-4 py-2 border border-gray-500 rounded-md">
+                                        {selectedModel === 'openai' ? 'OpenAI GPT-4o' : 'Hyperbolic'}
                                     </button>
                                 </DropdownTrigger>
                                 <DropdownMenu aria-label="Model Selection">
@@ -1060,7 +1078,7 @@ function ChatComponent() {
                                         OpenAI GPT-4o
                                     </DropdownItem>
                                     <DropdownItem key="hyperbolic" onClick={() => setSelectedModel('hyperbolic')}>
-                                        Llama 3.3 70B
+                                    Hyperbolic
                                     </DropdownItem>
                                 </DropdownMenu>
                             </Dropdown>
@@ -1134,7 +1152,7 @@ function ChatComponent() {
                             <Textarea
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder={isConnected ? "Type your message here..." : "Connect wallet to start chatting"}
+                                placeholder={isConnected ? "Type your message here..." : "Connect Wallet to Start Using Us"}
                                 minRows={1}
                                 maxRows={4}
                                 className="flex-1"
@@ -1144,13 +1162,19 @@ function ChatComponent() {
                             <button
                                 onClick={handleSendMessage}
                                 disabled={isLoading || !input.trim() || !isConnected}
-                                className={`p-3 rounded-full ${
-                                    !isConnected 
-                                        ? 'bg-gray-300 cursor-not-allowed' 
-                                        : 'bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300'
+                                className={`p-3 rounded-full relative ${
+                                    !isConnected || !input.trim()
+                                        ? 'bg-gray-200 cursor-not-allowed' // Disabled state
+                                        : isLoading
+                                            ? 'bg-blue-400 cursor-wait' // Loading state
+                                            : 'bg-blue-500 hover:bg-blue-600' // Normal state
                                 } text-white`}
                             >
-                                <FiSend size={20} />
+                                {isLoading ? (
+                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <FiSend size={20} />
+                                )}
                             </button>
                         </div>
                     </div>
