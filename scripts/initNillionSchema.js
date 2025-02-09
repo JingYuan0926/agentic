@@ -1,6 +1,14 @@
 import { SecretVaultWrapper } from 'nillion-sv-wrappers';
-import config from '../nillionConfig/nillion.json' assert { type: 'json' };
-import schema from '../nillionConfig/chatSchema.json' assert { type: 'json' };
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Read config files
+const config = JSON.parse(readFileSync(join(__dirname, '../nillionConfig/nillion.json'), 'utf8'));
+const schema = JSON.parse(readFileSync(join(__dirname, '../nillionConfig/chatSchema.json'), 'utf8'));
 
 async function main() {
   try {
@@ -26,9 +34,9 @@ async function main() {
     console.log('📚 New Schema:', newSchema);
 
     // Save the schema ID
-    const fs = await import('fs');
-    await fs.promises.writeFile(
-      './nillionConfig/schemaId.json',
+    const fs = await import('fs/promises');
+    await fs.writeFile(
+      join(__dirname, '../nillionConfig/schemaId.json'),
       JSON.stringify({ schemaId: newSchema[0].result.data }, null, 2)
     );
     console.log('📝 Schema ID saved to config');

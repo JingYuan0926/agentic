@@ -89,6 +89,14 @@ function ChatComponent() {
     // Add new state for proof loading at component level
     const [proofLoadingStates, setProofLoadingStates] = useState({});
 
+    // Inside your Chat component, add a new state for AI dialogs
+    const [aiDialogs, setAiDialogs] = useState({
+        finder: '',
+        creator: '',
+        developer: '',
+        verifier: ''
+    });
+
     // Add this effect at the top level of your component
     useEffect(() => {
         const checkAndSwitchNetwork = async () => {
@@ -285,8 +293,11 @@ function ChatComponent() {
 
     // Modify startNewChat to preserve old chat
     const startNewChat = () => {
-        // Save current chat to history if it has messages
-        if (messages.length > 0) {
+        // Generate new chat ID
+        const newChatId = Date.now().toString();
+        
+        // Save current chat to history if it has messages and a different ID
+        if (messages.length > 0 && currentChatId) {
             setChatHistory(prev => [{
                 id: currentChatId,
                 messages: [...messages],
@@ -294,18 +305,18 @@ function ChatComponent() {
             }, ...prev]);
         }
 
-        // Start new chat
-        const newChatId = Date.now().toString();
-        setCurrentChatId(newChatId);
+        // Clear current messages and set new chat ID
         setMessages([]);
+        setCurrentChatId(newChatId);
     };
 
-    // Add chat selection handler
+    // Modify selectChat function to reverse message order
     const selectChat = (chatId) => {
         const selectedChat = chatHistory.find(chat => chat.id === chatId);
         if (selectedChat) {
             setCurrentChatId(chatId);
-            setMessages(selectedChat.messages);
+            // Reverse the order of messages
+            setMessages([...selectedChat.messages].reverse());
         }
     };
 
@@ -375,6 +386,11 @@ function ChatComponent() {
                 setActiveAgent(null);
             }
 
+            // Update aiDialogs when it's an AI message
+            if (role === 'assistant' && agent) {
+                updateAiDialogs(agent, content);
+            }
+
             return messageData.chatId;
         } catch (error) {
             console.error('Message error:', error);
@@ -395,7 +411,7 @@ function ChatComponent() {
                 console.log('🔓 Message decrypted');
                 return decryptedContent;
             }
-            return encryptedContent; // Return as-is if not encrypted
+            return encryptedContent;
         } catch (error) {
             console.error('Failed to decrypt message:', error);
             return 'Encrypted message (cannot decrypt)';
@@ -993,6 +1009,26 @@ function ChatComponent() {
         }
     }, [isConnected]); // Simplified dependencies
 
+    // Inside ChatComponent, add this function
+    const updateAiDialogs = (agent, content) => {
+        if (agent) {
+            const agentMap = {
+                'Finn': 'finder',
+                'Codey': 'creator',
+                'Dex': 'developer',
+                'Vee': 'verifier'
+            };
+            
+            const agentKey = agentMap[agent];
+            if (agentKey) {
+                setAiDialogs(prev => ({
+                    ...prev,
+                    [agentKey]: content
+                }));
+            }
+        }
+    };
+
     return (
         <div className="flex flex-col h-screen">
             {/* Header spans full width */}
@@ -1000,7 +1036,10 @@ function ChatComponent() {
             
             <div className="flex flex-1 overflow-hidden">
                 {/* Left side - Avatar Grid */}
-                <AvatarGrid activeAgent={activeAgent} />
+                <AvatarGrid 
+                    activeAgent={activeAgent} 
+                    aiDialogs={aiDialogs}
+                />
 
                 {/* Right side - Chat Interface */}
                 <div className="w-1/2 flex flex-col">
@@ -1017,53 +1056,66 @@ function ChatComponent() {
                                         <FiMenu size={24} className={!isConnected ? 'text-gray-400' : ''} />
                                     </button>
                                 </DropdownTrigger>
-                                <DropdownMenu aria-label="Model Selection">
+                                <DropdownMenu aria-label="Chat History" className="w-[60%] p-0">
                                     {!isConnected ? (
-                                        <DropdownItem>
+                                        <DropdownItem className="p-0">
                                             <div className="text-gray-500">
                                                 Connect wallet to view chat history
                                             </div>
                                         </DropdownItem>
-                                    ) : chatHistory.length === 0 ? (
-                                        <DropdownItem>
-                                            <div className="text-gray-500">
-                                                No chat history found
-                                            </div>
-                                        </DropdownItem>
                                     ) : (
-                                        chatHistory.map((chat) => (
-                                            <DropdownItem 
-                                                key={chat.id}
-                                                className="flex justify-between items-center group"
-                                            >
-                                                <div 
-                                                    className="flex-1 cursor-pointer"
-                                                    onClick={() => selectChat(chat.id)}
+                                        <>
+                                            <DropdownItem className="p-0">
+                                                <button 
+                                                    onClick={startNewChat}
+                                                    className="w-full text-left text-blue-600 hover:bg-blue-50 px-1"
                                                 >
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-medium truncate">
-                                                            {chat.messages[0]?.content || 'New Chat'}
-                                                        </span>
-                                                        <span className="text-xs text-gray-500">
-                                                            {new Date(chat.timestamp).toLocaleDateString()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteChat(chat.id);
-                                                    }}
-                                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-600 p-1"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M3 6h18"></path>
-                                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                                    </svg>
+                                                    + New Chat
                                                 </button>
                                             </DropdownItem>
-                                        ))
+                                            <DropdownItem className="p-0">
+                                                <div className="border-b"></div>
+                                            </DropdownItem>
+                                            {chatHistory.length === 0 ? (
+                                                <DropdownItem className="p-0">
+                                                    <div className="text-gray-500 px-1">
+                                                        No chat history found
+                                                    </div>
+                                                </DropdownItem>
+                                            ) : (
+                                                chatHistory.map((chat) => (
+                                                    <DropdownItem 
+                                                        key={chat.id}
+                                                        className="p-0"
+                                                    >
+                                                        <div 
+                                                            onClick={() => selectChat(chat.id)}
+                                                            className="flex items-center w-full hover:bg-gray-50 px-1 group cursor-pointer"
+                                                        >
+                                                            <span className="text-sm flex-1">
+                                                                {chat.messages[0]?.content.split(' ').slice(0, 7).join(' ')}...
+                                                            </span>
+                                                            <span className="text-xs text-gray-500 mx-1">
+                                                                {new Date(chat.timestamp).toLocaleDateString()}
+                                                            </span>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteChat(chat.id);
+                                                                }}
+                                                                className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-600"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M3 6h18"></path>
+                                                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </DropdownItem>
+                                                ))
+                                            )}
+                                        </>
                                     )}
                                 </DropdownMenu>
                             </Dropdown>
